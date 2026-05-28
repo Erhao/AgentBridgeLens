@@ -1,0 +1,10 @@
+{
+  "name": "agentbridgelens",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev:bridge": "pnpm --filter @anthropic/agentbridgelens-bridge dev",
+    "dev:extension": "pnpm --filter @anthropic/agentbridgelens-extension dev",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

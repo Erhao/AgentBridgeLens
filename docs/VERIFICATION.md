@@ -9,7 +9,7 @@
 
 ## 验证发现（findings）
 
-- **F1｜`execute_js` 在严格 CSP 页面失效（已修）**：content script 里用 `new Function` 求值，会被页面 `script-src`（无 `unsafe-eval`）拦截。**修复：execute_js 先走 content script 快路径；若返回的 error 命中 CSP/eval，自动回退到 CDP `Runtime.evaluate`（`cdpEvaluate`，临时附加 debugger，可绕过页面 CSP），结束后解除。** 普通页无横幅、CSP 页短暂闪一下横幅。**状态：已修，待在严格 CSP 页复测。**
+- **F1｜`execute_js` 在严格 CSP 页面失效（已修）**：content script 里用 `new Function` 求值，会被页面 `script-src`（无 `unsafe-eval`）拦截。**修复：execute_js 先走 content script 快路径；若返回的 error 命中 CSP/eval，自动回退到 CDP `Runtime.evaluate`（`cdpEvaluate`，临时附加 debugger，可绕过页面 CSP），结束后解除。** 普通页无横幅、CSP 页短暂闪一下横幅。**状态：已修并验证 ✅（2026-05-30 于 blog.jetbrains.com 严格 CSP 页，`execute_js` 返回真实值且带 `viaCdp:true`，确认走了 CDP 回退）。**
 - **F2｜`get_network_requests` 对已加载页面返回空**：注入式捕获只抓 content script 加载之后的 fetch/XHR；页面在扩展注入前已加载完则为空。属设计限制，Phase 2 的 `start_cdp_network` 可覆盖。**状态：已知限制，文档说明即可。**
 - **F3｜`hide_hud` 偶发 InputValidationError**：首次调用在 harness 校验层被拒，再次调用（在 chrome:// 页）变为正常的 content-script 超时。疑为偶发，非持久 bug。**状态：待回到正常页复测确认。**
 - **F4｜连接无法常驻（部分修复，根因更深）**：MV3 Service Worker 闲置 ~30s 休眠，而 WebSocket 存活绑定在 SW 生命周期上——SW 一睡连接即断。
@@ -82,7 +82,7 @@
 
 ## 仍未覆盖（需特定条件，非 bug）
 
-- `execute_js` 在**非 CSP 页面**的正常执行（F1 在严格 CSP 页失败；普通页应可，待补测；彻底解决需 CDP `Runtime.evaluate`）
+- ~~`execute_js` 在严格 CSP 页~~ —— 已修并验证（见 F1）；普通页走 content script 快路径同样可用
 - `trace_element_to_source` 返回**真实组件文件+行号**（需本地 React/Vue **dev** 页；目前只验了优雅回退）
 - `trace_error_to_source` **真实 sourcemap 还原**（需带 .map 的 dev 堆栈）
 - `visualize_layout` 实际**画出橙框**（需含 overflow 截断内容的页面）

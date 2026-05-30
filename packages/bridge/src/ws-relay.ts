@@ -38,6 +38,15 @@ export class WsRelay {
       this.client = ws;
       console.error(`[BridgeLens] Extension connected from ${req.socket.remoteAddress}`);
 
+      // 应用层心跳：每 20s 发一条数据消息。MV3 Service Worker 收到 WS 消息会重置其
+      // ~30s 空闲计时器，从而保持唤醒、连接常驻。必须是数据消息（onmessage 触发），
+      // 协议级 ws.ping() 由浏览器透明处理、不触发 onmessage，起不到保活作用。
+      const heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ t: "ping" }));
+        }
+      }, 20_000);
+
       ws.on("message", (raw) => {
         const msg = JSON.parse(raw.toString()) as BridgeResponse;
         const pending = this.pending.get(msg.id);
@@ -51,6 +60,7 @@ export class WsRelay {
       });
 
       ws.on("close", () => {
+        clearInterval(heartbeat);
         this.client = null;
         console.error(`[BridgeLens] Extension disconnected`);
         for (const [id, { reject }] of this.pending) {

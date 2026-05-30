@@ -15,8 +15,8 @@
 - **F4｜连接无法常驻（部分修复，根因更深）**：MV3 Service Worker 闲置 ~30s 休眠，而 WebSocket 存活绑定在 SW 生命周期上——SW 一睡连接即断。
   - 第一版修复：`chrome.alarms`（0.5min）周期唤醒 SW 并 `connect()`。**但这只是每 30s 唤醒一瞬，连接随即又断**，验证时调用大多落在"死窗口"，仍频繁报 not connected。
   - **正确修法（待做）**：Bridge 端定期发**心跳 ping**（每 ~20s），SW 每收到一条 WS 消息就重置 30s 空闲计时器，从而保持唤醒、连接常驻。需改 `ws-relay.ts` + 重建 Bridge + 重启 Claude Code。
-  - **当前可用的人工绕过**：测试前先点一下扩展图标（打开弹窗）唤醒 SW、建立连接，然后立刻连续调用。
-  - **状态：alarms 已加但不足；心跳修复待做。**
+  - **已实施心跳修复**：`ws-relay.ts` 每 20s 向扩展发一条 `{t:"ping"}` 数据消息；扩展 `onmessage` 收到 ping 即忽略（但收消息这一动作重置了 SW 空闲计时器），连接得以常驻。`alarms` 作为兜底保留（断线后唤醒重连）。
+  - **状态：已修（alarms 兜底 + WS 心跳保活），待重启 Bridge/重载扩展后验证。**
 - **F3｜`hide_hud` 调用被校验层拒绝**：调用报 `InputValidationError: hide_hud expects no parameters but received unexpected input`，而 `show_hud`/`clear_overlays`/`stop_cdp_network` 等同样无参工具均正常，且 `hide_hud` 的注册定义与 `show_hud` 完全一致。疑为工具调用/校验层的偶发问题，非 bridge 返回错误。2026-05-30 多次复现。**状态：待排查。规避：刷新页面即可清掉 HUD。**
 - **F-token｜token 鉴权端到端有效**：扩展填错 token 时连接被拒（停在「未连接」），填对后立即连上。验证了 Phase 5 的 `verifyClient` 鉴权。✅
 

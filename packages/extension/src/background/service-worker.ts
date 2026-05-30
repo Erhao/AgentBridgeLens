@@ -34,7 +34,10 @@ async function connect() {
   };
 
   ws.onmessage = async (event) => {
-    const request = JSON.parse(event.data as string) as BridgeRequest;
+    const parsed = JSON.parse(event.data as string) as BridgeRequest | { t?: string };
+    // 心跳 ping：仅用于保活（收到即重置 SW 空闲计时器），无需回应。
+    if ((parsed as { t?: string }).t === "ping") return;
+    const request = parsed as BridgeRequest;
     try {
       const result = await handleToolCall(request);
       const response: BridgeResponse = { id: request.id, result };

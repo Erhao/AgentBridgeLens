@@ -102,6 +102,21 @@ export function inspectElement(selector: string) {
   };
 }
 
+export function getElementRect(selector: string) {
+  const el = document.querySelector(selector);
+  if (!el) return { error: `Element not found: ${selector}` };
+  el.scrollIntoView({ block: "center", inline: "center" });
+  const rect = el.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  return {
+    x: Math.max(0, rect.x) * dpr,
+    y: Math.max(0, rect.y) * dpr,
+    width: rect.width * dpr,
+    height: rect.height * dpr,
+    dpr,
+  };
+}
+
 export function executeJs(code: string): unknown {
   try {
     const fn = new Function(`return (${code})`);

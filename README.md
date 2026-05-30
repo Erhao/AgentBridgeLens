@@ -71,6 +71,9 @@ Use bridgelens to capture a screenshot of the current page
 | `clear_highlights` | Remove all highlight overlays |
 | `get_console_logs` | Get captured console logs |
 | `get_network_requests` | Get captured network requests |
+| `get_errors` | Get only error-level console entries |
+| `trace_element_to_source` | Trace a DOM element to its component source file/line (React/Vue dev builds) |
+| `trace_style_to_source` | Trace which CSS rules apply and which stylesheet they come from |
 
 ## Development
 

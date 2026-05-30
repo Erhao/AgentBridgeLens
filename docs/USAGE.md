@@ -134,3 +134,6 @@ Claude 大致会这么做：
 | `highlight_element` / `clear_highlights` | 「把这个元素高亮出来」/「清掉高亮」 |
 | `get_console_logs` | 「控制台有报错吗」 |
 | `get_network_requests` | 「页面发了哪些请求」 |
+| `get_errors` | 「只看报错」 |
+| `trace_element_to_source` | 「这个元素是哪个组件渲染的，在哪个文件」 |
+| `trace_style_to_source` | 「这个样式是从哪个 CSS 文件来的」 |

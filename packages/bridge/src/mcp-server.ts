@@ -20,9 +20,9 @@ export function createMcpServer(relay: WsRelay): McpServer {
 
   server.tool(
     "capture_screenshot",
-    "Capture a screenshot of the current page or a specific element",
+    "Capture a screenshot of the current page, or crop to a specific element if a selector is given",
     {
-      selector: z.string().optional().describe("CSS selector to capture a specific element. Omit for full viewport."),
+      selector: z.string().optional().describe("CSS selector to capture a specific element (scrolled into view and cropped). Omit for full viewport."),
     },
     async ({ selector }) => {
       const result = (await relay.send("capture_screenshot", { selector })) as {
@@ -121,6 +121,41 @@ export function createMcpServer(relay: WsRelay): McpServer {
     },
     async ({ urlPattern, status }) => {
       const result = await relay.send("get_network_requests", { urlPattern, status });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_errors",
+    "Get only the error-level entries captured from the page console (uncaught errors and rejections included)",
+    {},
+    async () => {
+      const result = await relay.send("get_errors", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "trace_element_to_source",
+    "Trace a DOM element back to its source component file and line number (React/Vue dev builds)",
+    {
+      selector: z.string().describe("CSS selector of the element to trace"),
+    },
+    async ({ selector }) => {
+      const result = await relay.send("trace_element_to_source", { selector });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "trace_style_to_source",
+    "Trace which CSS rules apply to an element and which stylesheet they come from",
+    {
+      selector: z.string().describe("CSS selector of the element to trace"),
+      property: z.string().optional().describe("Only return rules that set this CSS property"),
+    },
+    async ({ selector, property }) => {
+      const result = await relay.send("trace_style_to_source", { selector, property });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
   );

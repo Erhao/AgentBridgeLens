@@ -5,6 +5,7 @@ import type {
   ContentResponse,
 } from "../shared/protocol";
 import { getBridgeConfig } from "../shared/config";
+import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 
 const RECONNECT_INTERVAL = 3000;
 
@@ -103,17 +104,64 @@ async function sendToContentScript(
   });
 }
 
+async function runInMainWorld<T>(
+  tabId: number,
+  func: (...args: never[]) => T,
+  args: unknown[]
+): Promise<T> {
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: func as (...args: unknown[]) => T,
+    args: args as never[],
+  });
+  return injection.result as T;
+}
+
+async function cropDataUrl(
+  dataUrl: string,
+  rect: { x: number; y: number; width: number; height: number }
+): Promise<string> {
+  const blob = await (await fetch(dataUrl)).blob();
+  const bitmap = await createImageBitmap(blob);
+  const sx = Math.round(rect.x);
+  const sy = Math.round(rect.y);
+  const w = Math.max(1, Math.min(Math.round(rect.width), bitmap.width - sx));
+  const h = Math.max(1, Math.min(Math.round(rect.height), bitmap.height - sy));
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  ctx.drawImage(bitmap, sx, sy, w, h, 0, 0, w, h);
+  const outBlob = await canvas.convertToBlob({ type: "image/png" });
+  const bytes = new Uint8Array(await outBlob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/png;base64,${btoa(binary)}`;
+}
+
 async function handleToolCall(request: BridgeRequest): Promise<unknown> {
   const { tool, params } = request;
   const tab = await getActiveTab();
 
   switch (tool) {
     case "capture_screenshot": {
+      const selector = params.selector as string | undefined;
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
         format: "png",
       });
-      return { dataUrl };
+      if (!selector) return { dataUrl };
+      const rect = (await sendToContentScript(tab.id!, "get_element_rect", {
+        selector,
+      })) as { x: number; y: number; width: number; height: number; error?: string };
+      if (rect.error || !rect.width || !rect.height) return { dataUrl };
+      return { dataUrl: await cropDataUrl(dataUrl, rect) };
     }
+
+    case "trace_element_to_source":
+      return runInMainWorld(tab.id!, traceElementToSource, [params.selector]);
+
+    case "trace_style_to_source":
+      return runInMainWorld(tab.id!, traceStyleToSource, [params.selector, params.property]);
 
     default:
       return sendToContentScript(tab.id!, tool, params);

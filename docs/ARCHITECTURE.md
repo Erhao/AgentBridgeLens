@@ -62,10 +62,11 @@ interface BridgeResponse { id: string; result?: unknown; error?: { message: stri
 
 ### 2.3 Extension 内部：Service Worker ↔ Content Script
 
-Service Worker（`background/service-worker.ts`）收到 `BridgeRequest` 后分两种情况：
+Service Worker（`background/service-worker.ts`）收到 `BridgeRequest` 后分三种情况：
 
-1. **`capture_screenshot`**：Service Worker 直接用 `chrome.tabs.captureVisibleTab` 处理（截图需要扩展级 API）。
-2. **其他所有工具**：转发给当前激活标签页的 Content Script，通过 `chrome.tabs.sendMessage` 下发 `ContentRequest`，监听 `chrome.runtime.onMessage` 收回 `ContentResponse`，15 秒超时。
+1. **`capture_screenshot`**：Service Worker 用 `chrome.tabs.captureVisibleTab` 截全屏；若带 `selector`，再向 Content Script 取元素位置（`get_element_rect`），用 `OffscreenCanvas` 裁剪到该元素。
+2. **`trace_element_to_source` / `trace_style_to_source`**：用 `chrome.scripting.executeScript({ world: "MAIN" })` 注入页面**主世界**执行。因为 React fiber 的 `_debugSource`、Vue 的 `__file` 等内部属性挂在主世界的 DOM 节点上，Content Script 的隔离世界读不到。
+3. **其他所有工具**：转发给当前激活标签页的 Content Script，通过 `chrome.tabs.sendMessage` 下发 `ContentRequest`，监听 `chrome.runtime.onMessage` 收回 `ContentResponse`，15 秒超时。
 
 Content Script（`content/index.ts`）按 `tool` 名分发到具体处理函数（DOM 检查、执行 JS、高亮、读日志等），执行后把结果通过 `chrome.runtime.sendMessage` 发回 Service Worker。
 
@@ -98,12 +99,12 @@ Claude Code  ← 拿到页面信息
 
 ## 3. 可用的 MCP 工具
 
-由 `packages/bridge/src/mcp-server.ts` 定义，共 9 个：
+由 `packages/bridge/src/mcp-server.ts` 定义，共 12 个：
 
 | 工具 | 功能 | 处理位置 |
 |------|------|---------|
 | `get_page_info` | 获取页面 URL、标题、meta 信息 | Content Script |
-| `capture_screenshot` | 截取页面或指定元素截图 | Service Worker |
+| `capture_screenshot` | 截取页面或指定元素截图 | Service Worker (+CS 取位置) |
 | `execute_js` | 在页面上下文执行 JS 并返回结果 | Content Script |
 | `get_dom_snapshot` | 获取精简 DOM 树（可指定子树/深度） | Content Script |
 | `inspect_element` | 检查元素属性、计算样式、盒模型 | Content Script |
@@ -111,6 +112,9 @@ Claude Code  ← 拿到页面信息
 | `clear_highlights` | 清除所有高亮叠加层 | Content Script |
 | `get_console_logs` | 获取捕获的控制台日志（可按级别过滤） | Content Script |
 | `get_network_requests` | 获取捕获的网络请求记录（可按 URL/状态过滤） | Content Script |
+| `get_errors` | 仅获取 error 级别日志（含未捕获异常/Promise 拒绝） | Content Script |
+| `trace_element_to_source` | DOM 元素 → 组件源码文件+行号（React/Vue 开发构建） | MAIN world 注入 |
+| `trace_style_to_source` | 元素匹配的 CSS 规则 → 所属样式表 | MAIN world 注入 |
 
 ---
 

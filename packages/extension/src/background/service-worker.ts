@@ -286,5 +286,49 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "bridgelens-keepalive") connect();
 });
 
+// 扩展更新/安装后，旧标签页里的 content script 会失效，需刷新才能恢复连接。
+// 注入一个顶部提示条提醒用户刷新（截图/网络抓包等 CDP 类工具不受影响、无需刷新）。
+// 该函数经 chrome.scripting 注入页面执行，必须自包含（仅用 DOM / location）。
+function showReloadHint() {
+  const ID = "bridgelens-reload-hint";
+  if (document.getElementById(ID)) return;
+  const bar = document.createElement("div");
+  bar.id = ID;
+  bar.style.cssText =
+    "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#4a90d9;color:#fff;" +
+    "font:13px/1.5 system-ui,sans-serif;padding:8px 14px;display:flex;align-items:center;gap:12px;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,.25);";
+  const msg = document.createElement("span");
+  msg.style.flex = "1";
+  msg.textContent =
+    "AgentBridgeLens 已更新/加载，刷新本页以恢复与扩展的连接（截图、网络抓包等无需刷新）。";
+  const reload = document.createElement("button");
+  reload.textContent = "刷新";
+  reload.style.cssText =
+    "background:#fff;color:#2d6fd6;border:none;border-radius:5px;padding:4px 12px;cursor:pointer;font:13px system-ui;";
+  reload.addEventListener("click", () => location.reload());
+  const close = document.createElement("button");
+  close.textContent = "✕";
+  close.style.cssText = "background:transparent;color:#fff;border:none;cursor:pointer;font-size:15px;";
+  close.addEventListener("click", () => bar.remove());
+  bar.appendChild(msg);
+  bar.appendChild(reload);
+  bar.appendChild(close);
+  document.documentElement.appendChild(bar);
+}
+
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason !== "install" && details.reason !== "update") return;
+  const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
+  for (const t of tabs) {
+    if (typeof t.id !== "number") continue;
+    chrome.scripting
+      .executeScript({ target: { tabId: t.id }, func: showReloadHint })
+      .catch(() => {
+        /* 受限页面（如 web store / PDF viewer）忽略 */
+      });
+  }
+});
+
 registerTabListeners();
 connect();

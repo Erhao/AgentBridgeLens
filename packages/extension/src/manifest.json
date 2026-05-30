@@ -8,7 +8,8 @@
     "scripting",
     "debugger",
     "storage",
-    "sidePanel"
+    "sidePanel",
+    "alarms"
   ],
   "host_permissions": ["<all_urls>"],
   "action": {

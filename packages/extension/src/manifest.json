@@ -5,6 +5,7 @@
   "description": "Bridge AI coding agents with real browser environments — visual debugging, DOM inspection, and interactive verification.",
   "permissions": [
     "activeTab",
+    "tabs",
     "scripting",
     "debugger",
     "storage",

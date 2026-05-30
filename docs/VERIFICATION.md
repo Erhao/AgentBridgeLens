@@ -80,6 +80,23 @@
 
 > 注意：`request_user_confirmation` 依赖 Side Panel 处于打开状态（扩展无法在无用户手势时强行打开侧栏）。WS 调用超时已从 30s 放宽到 120s 以容纳人工确认与长回放。
 
+## Phase A — 标签页定位与多 tab（待验证，需重启 Bridge + 重载扩展）
+
+> 本批改动了 **Bridge + 扩展两端**，且新增 `tabs` 权限：需 `git pull`(主仓库) → `pnpm build` → 重载扩展 → 重启 Claude Code。
+
+| 功能 | 验证方法 | 状态 |
+|------|---------|------|
+| `list_tabs` | 返回所有窗口的所有 tab（含 isTarget/openedByTarget） | ⬜ |
+| `set_target_tab` / `get_target_tab` / `clear_target_tab` | 固定/查询/取消目标 | ⬜ |
+| 固定后切换标签页 | 切到别的 tab，工具仍操作被固定的那个 | ⬜ |
+| 工具 `tabId` 参数 | 显式传 tabId，操作指定 tab | ⬜ |
+| 后台 tab 读 DOM/截图 | 不切前台，对后台 tab `get_dom_snapshot`/截图（CDP）成功 | ⬜ |
+| 多 tab 并行抓包 | 同时对两个 tab `start_cdp_network` 互不干扰 | ⬜ |
+| 新标签策略 stay | 目标页打开新标签，目标不变，`list_tabs` 标 `openedByTarget` | ⬜ |
+| 新标签策略 follow | 切到 follow，目标页开新标签后目标自动转移 | ⬜ |
+| 目标关闭回退 | 关掉目标 tab，自动回到跟随激活 | ⬜ |
+| popup 标签页列表 | 弹窗列出 tab、点「设为目标」生效、🎯 标识 | ⬜ |
+
 ## 仍未覆盖（需特定条件，非 bug）
 
 - ~~`execute_js` 在严格 CSP 页~~ —— 已修并验证（见 F1）；普通页走 content script 快路径同样可用

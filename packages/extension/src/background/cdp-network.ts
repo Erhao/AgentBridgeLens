@@ -1,9 +1,7 @@
 /**
- * 基于 chrome.debugger（CDP）的网络监控。
- * 相比 content script 注入式捕获，CDP 能拿到更底层、更完整的数据（含响应体），
- * 且不会漏掉 content script 注入前发出的请求。代价：附加 debugger 会在标签页顶部
- * 显示「DevTools 正在调试此标签页」横幅，且与已打开的 DevTools 互斥。
- * 因此设计为**显式 start/stop**，不自动附加。
+ * 基于 chrome.debugger（CDP）的能力：网络监控、execute_js 的 CSP 回退、后台 tab 截图。
+ * 全部**按 tabId 并行**——支持同时跟踪多个标签页。
+ * 附加 debugger 会在标签页顶部显示「DevTools 正在调试此标签页」横幅，且与已打开的 DevTools 互斥。
  */
 
 interface CdpRequest {
@@ -18,19 +16,19 @@ interface CdpRequest {
   failed?: string;
 }
 
-const records = new Map<string, CdpRequest>();
-let attachedTabId: number | null = null;
+// 每个 tab 独立的网络记录；以及当前由“网络监控”持有 attach 的 tab 集合。
+const records = new Map<number, Map<string, CdpRequest>>();
+const networkTabs = new Set<number>();
 
-function onEvent(
-  source: chrome.debugger.Debuggee,
-  method: string,
-  params?: object
-): void {
-  if (source.tabId !== attachedTabId) return;
+function onEvent(source: chrome.debugger.Debuggee, method: string, params?: object): void {
+  const tabId = source.tabId;
+  if (typeof tabId !== "number") return;
+  const tabRecords = records.get(tabId);
+  if (!tabRecords) return;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const p = params as any;
   if (method === "Network.requestWillBeSent") {
-    records.set(p.requestId, {
+    tabRecords.set(p.requestId, {
       requestId: p.requestId,
       url: p.request.url,
       method: p.request.method,
@@ -38,17 +36,17 @@ function onEvent(
       startTime: p.timestamp,
     });
   } else if (method === "Network.responseReceived") {
-    const r = records.get(p.requestId);
+    const r = tabRecords.get(p.requestId);
     if (r) {
       r.status = p.response.status;
       r.mimeType = p.response.mimeType;
       r.type = p.type;
     }
   } else if (method === "Network.loadingFinished") {
-    const r = records.get(p.requestId);
+    const r = tabRecords.get(p.requestId);
     if (r) r.endTime = p.timestamp;
   } else if (method === "Network.loadingFailed") {
-    const r = records.get(p.requestId);
+    const r = tabRecords.get(p.requestId);
     if (r) {
       r.endTime = p.timestamp;
       r.failed = p.errorText;
@@ -57,45 +55,70 @@ function onEvent(
 }
 
 function onDetach(source: chrome.debugger.Debuggee): void {
-  if (source.tabId === attachedTabId) {
-    attachedTabId = null;
-    chrome.debugger.onEvent.removeListener(onEvent);
-  }
+  const tabId = source.tabId;
+  if (typeof tabId === "number") networkTabs.delete(tabId);
+}
+
+let listenersBound = false;
+function ensureListeners() {
+  if (listenersBound) return;
+  chrome.debugger.onEvent.addListener(onEvent);
+  chrome.debugger.onDetach.addListener(onDetach);
+  listenersBound = true;
+}
+
+/** 该 tab 当前是否已被本扩展 attach（任何用途）。用于决定 attach/detach 是否复用。 */
+async function isAttached(tabId: number): Promise<boolean> {
+  const targets = await chrome.debugger.getTargets();
+  return targets.some((t) => t.tabId === tabId && t.attached);
 }
 
 export async function startCdpNetwork(tabId: number) {
-  if (attachedTabId === tabId) return { status: "already-attached", tabId };
-  if (attachedTabId !== null) await stopCdpNetwork();
-
-  await chrome.debugger.attach({ tabId }, "1.3");
-  attachedTabId = tabId;
-  records.clear();
-  chrome.debugger.onEvent.addListener(onEvent);
-  chrome.debugger.onDetach.addListener(onDetach);
+  ensureListeners();
+  if (networkTabs.has(tabId)) return { status: "already-attached", tabId };
+  if (!(await isAttached(tabId))) await chrome.debugger.attach({ tabId }, "1.3");
+  networkTabs.add(tabId);
+  records.set(tabId, new Map());
   await chrome.debugger.sendCommand({ tabId }, "Network.enable");
   return { status: "attached", tabId, note: "CDP 网络监控已开启，新发出的请求会被记录。" };
 }
 
-export async function stopCdpNetwork() {
-  if (attachedTabId === null) return { status: "not-attached" };
-  const tabId = attachedTabId;
-  chrome.debugger.onEvent.removeListener(onEvent);
+export async function stopCdpNetwork(tabId: number) {
+  if (!networkTabs.has(tabId)) return { status: "not-attached", tabId };
+  networkTabs.delete(tabId);
   try {
     await chrome.debugger.detach({ tabId });
   } catch {
     /* already detached */
   }
-  attachedTabId = null;
   return { status: "detached", tabId };
 }
 
-/**
- * 用 CDP Runtime.evaluate 在页面执行代码——可绕过页面 CSP（content script 的
- * `new Function`/eval 会被严格 CSP 拦截，见 F1）。若该标签页已被 start_cdp_network
- * 附加则复用，否则临时附加并在结束后解除（短暂闪一下调试横幅）。
- */
+export function getCdpNetwork(tabId: number, urlPattern?: string, status?: number) {
+  const tabRecords = records.get(tabId);
+  let list = tabRecords ? Array.from(tabRecords.values()) : [];
+  if (urlPattern) list = list.filter((r) => r.url.includes(urlPattern));
+  if (status) list = list.filter((r) => r.status === status);
+  return {
+    tabId,
+    attached: networkTabs.has(tabId),
+    count: list.length,
+    requests: list.map((r) => ({
+      url: r.url,
+      method: r.method,
+      type: r.type,
+      status: r.status,
+      mimeType: r.mimeType,
+      failed: r.failed,
+      durationMs:
+        r.endTime && r.startTime ? Math.round((r.endTime - r.startTime) * 1000) : undefined,
+    })),
+  };
+}
+
+/** 用 CDP Runtime.evaluate 执行代码（绕过页面 CSP，见 F1）。按 tabId。 */
 export async function cdpEvaluate(tabId: number, code: string) {
-  const reuse = attachedTabId === tabId;
+  const reuse = await isAttached(tabId);
   if (!reuse) await chrome.debugger.attach({ tabId }, "1.3");
   try {
     const res = (await chrome.debugger.sendCommand({ tabId }, "Runtime.evaluate", {
@@ -124,22 +147,22 @@ export async function cdpEvaluate(tabId: number, code: string) {
   }
 }
 
-export function getCdpNetwork(urlPattern?: string, status?: number) {
-  let list = Array.from(records.values());
-  if (urlPattern) list = list.filter((r) => r.url.includes(urlPattern));
-  if (status) list = list.filter((r) => r.status === status);
-  return {
-    attached: attachedTabId !== null,
-    count: list.length,
-    requests: list.map((r) => ({
-      url: r.url,
-      method: r.method,
-      type: r.type,
-      status: r.status,
-      mimeType: r.mimeType,
-      failed: r.failed,
-      durationMs:
-        r.endTime && r.startTime ? Math.round((r.endTime - r.startTime) * 1000) : undefined,
-    })),
-  };
+/** 截取后台 tab（CDP Page.captureScreenshot，可截不在前台的 tab）。返回 dataURL。 */
+export async function cdpScreenshot(tabId: number): Promise<string> {
+  const reuse = await isAttached(tabId);
+  if (!reuse) await chrome.debugger.attach({ tabId }, "1.3");
+  try {
+    const res = (await chrome.debugger.sendCommand({ tabId }, "Page.captureScreenshot", {
+      format: "png",
+    })) as { data: string };
+    return `data:image/png;base64,${res.data}`;
+  } finally {
+    if (!reuse) {
+      try {
+        await chrome.debugger.detach({ tabId });
+      } catch {
+        /* already detached */
+      }
+    }
+  }
 }

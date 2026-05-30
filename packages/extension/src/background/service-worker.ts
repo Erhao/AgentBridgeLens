@@ -6,7 +6,21 @@ import type {
 } from "../shared/protocol";
 import { getBridgeConfig } from "../shared/config";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
-import { startCdpNetwork, stopCdpNetwork, getCdpNetwork, cdpEvaluate } from "./cdp-network";
+import {
+  startCdpNetwork,
+  stopCdpNetwork,
+  getCdpNetwork,
+  cdpEvaluate,
+  cdpScreenshot,
+} from "./cdp-network";
+import {
+  resolveTabId,
+  listTabs,
+  setTargetTab,
+  getTargetTab,
+  clearTargetTab,
+  registerTabListeners,
+} from "./tabs";
 
 const RECONNECT_INTERVAL = 3000;
 
@@ -70,10 +84,22 @@ function scheduleReconnect() {
   }, RECONNECT_INTERVAL);
 }
 
-async function getActiveTab(): Promise<chrome.tabs.Tab> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) throw new Error("No active tab found");
-  return tab;
+/** 截图：激活 tab 用 captureVisibleTab（快、无横幅）；后台 tab 用 CDP（可截后台）。 */
+async function screenshot(tabId: number, selector?: string): Promise<{ dataUrl: string }> {
+  const tab = await chrome.tabs.get(tabId);
+  const full = tab.active
+    ? await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" })
+    : await cdpScreenshot(tabId);
+  if (!selector) return { dataUrl: full };
+  const rect = (await sendToContentScript(tabId, "get_element_rect", { selector })) as {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    error?: string;
+  };
+  if (rect.error || !rect.width || !rect.height) return { dataUrl: full };
+  return { dataUrl: await cropDataUrl(full, rect) };
 }
 
 async function sendToContentScript(
@@ -164,59 +190,60 @@ function requestConfirmation(message: string, options: string[]): Promise<unknow
 
 async function handleToolCall(request: BridgeRequest): Promise<unknown> {
   const { tool, params } = request;
-
-  if (tool === "request_user_confirmation") {
-    broadcast({ type: "bridgelens-activity", tool, ts: Date.now() });
-    const options = (params.options as string[] | undefined) || ["确认", "取消"];
-    return requestConfirmation(params.message as string, options);
-  }
-
-  const tab = await getActiveTab();
   broadcast({ type: "bridgelens-activity", tool, ts: Date.now() });
 
+  // —— 不针对具体页面的管理类工具 ——
   switch (tool) {
-    case "capture_screenshot": {
-      const selector = params.selector as string | undefined;
-      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
-        format: "png",
-      });
-      if (!selector) return { dataUrl };
-      const rect = (await sendToContentScript(tab.id!, "get_element_rect", {
-        selector,
-      })) as { x: number; y: number; width: number; height: number; error?: string };
-      if (rect.error || !rect.width || !rect.height) return { dataUrl };
-      return { dataUrl: await cropDataUrl(dataUrl, rect) };
+    case "list_tabs":
+      return listTabs();
+    case "set_target_tab":
+      return setTargetTab(params.tabId as number);
+    case "get_target_tab":
+      return getTargetTab();
+    case "clear_target_tab":
+      return clearTargetTab();
+    case "request_user_confirmation": {
+      const options = (params.options as string[] | undefined) || ["确认", "取消"];
+      return requestConfirmation(params.message as string, options);
     }
+  }
+
+  // —— 页面类工具：解析目标 tab（显式 tabId > 固定目标 > 激活）——
+  const tabId = await resolveTabId(params.tabId as number | undefined);
+
+  switch (tool) {
+    case "capture_screenshot":
+      return screenshot(tabId, params.selector as string | undefined);
 
     case "execute_js": {
       // 先走 content script（快、无横幅）；若被页面 CSP 拦截，回退到 CDP（绕过 CSP）。
-      const res = (await sendToContentScript(tab.id!, "execute_js", params)) as {
+      const res = (await sendToContentScript(tabId, "execute_js", params)) as {
         value?: unknown;
         error?: string;
       };
       if (res?.error && /content security policy|unsafe-eval|\beval\b/i.test(res.error)) {
-        return cdpEvaluate(tab.id!, params.code as string);
+        return cdpEvaluate(tabId, params.code as string);
       }
       return res;
     }
 
     case "trace_element_to_source":
-      return runInMainWorld(tab.id!, traceElementToSource, [params.selector]);
+      return runInMainWorld(tabId, traceElementToSource, [params.selector]);
 
     case "trace_style_to_source":
-      return runInMainWorld(tab.id!, traceStyleToSource, [params.selector, params.property]);
+      return runInMainWorld(tabId, traceStyleToSource, [params.selector, params.property]);
 
     case "start_cdp_network":
-      return startCdpNetwork(tab.id!);
+      return startCdpNetwork(tabId);
 
     case "stop_cdp_network":
-      return stopCdpNetwork();
+      return stopCdpNetwork(tabId);
 
     case "get_cdp_network":
-      return getCdpNetwork(params.urlPattern as string | undefined, params.status as number | undefined);
+      return getCdpNetwork(tabId, params.urlPattern as string | undefined, params.status as number | undefined);
 
     default:
-      return sendToContentScript(tab.id!, tool, params);
+      return sendToContentScript(tabId, tool, params);
   }
 }
 
@@ -259,4 +286,5 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "bridgelens-keepalive") connect();
 });
 
+registerTabListeners();
 connect();

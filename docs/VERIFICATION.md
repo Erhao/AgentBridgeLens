@@ -5,21 +5,28 @@
 
 验证前置：`pnpm build` → `chrome://extensions/` 重新加载扩展 → 准备一个测试页面（建议含 React/Vue dev server 的页面）。
 
-## Phase 1 — 通信与基础工具
+> ⚠️ **重要**：MCP 里运行的 Bridge 由 Claude Code 启动，工具集在启动时注册。改了 bridge 代码后必须 **重新 `pnpm build` 并重启 Claude Code**，否则跑的还是旧版（旧版只有 9 个工具）。
+
+## 验证发现（findings）
+
+- **F1｜`execute_js` 在严格 CSP 页面失效**：content script 里用 `new Function` 求值，会被页面 `script-src`（无 `unsafe-eval`）拦截，报 CSP 错误。彻底修复需改用 CDP `Runtime.evaluate`（经 chrome.debugger，可绕过页面 CSP）。已在 2026-05-30 于 JetBrains 博客页复现。**状态：待修。**
+- **F2｜`get_network_requests` 对已加载页面返回空**：注入式捕获只抓 content script 加载之后的 fetch/XHR；页面在扩展注入前已加载完则为空。属设计限制，Phase 2 的 `start_cdp_network` 可覆盖。**状态：已知限制，文档说明即可。**
+
+## Phase 1 — 通信与基础工具（已部分验证 @2026-05-30，旧版 9 工具 Bridge）
 
 | 功能 | 验证方法 | 状态 |
 |------|---------|------|
-| Bridge ↔ 扩展连接 | 启动后扩展弹窗显示「已连接」 | ⬜ |
+| Bridge ↔ 扩展连接 | 启动后扩展弹窗显示「已连接」 | ✅ 已连（get_page_info 返回真实页面） |
+| `get_page_info` | 返回当前页 URL/标题/viewport | ✅ |
+| `inspect_element` | 返回样式/盒模型 | ✅ |
+| `highlight_element` / `clear_highlights` | 页面出现/消失高亮框 | ✅ 截图确认 |
+| `get_dom_snapshot` | 返回精简 DOM 树 | ✅ |
+| `get_console_logs` | 返回捕获的日志 | ✅ |
+| `capture_screenshot`（整页） | 返回可视区截图 | ✅ |
+| `get_network_requests` | 返回注入式捕获的请求 | ⚠️ 见 F2（已加载页为空） |
+| `execute_js` | 执行表达式返回结果 | ❌ 见 F1（CSP 拦截） |
+| `capture_screenshot`（元素） | 带 selector，返回裁剪到该元素的图 | ⏸️ 待新版 Bridge（旧版忽略 selector） |
 | 端口可配置 | 弹窗改端口 + MCP 配 `BRIDGELENS_PORT`，仍能连上 | ⬜ |
-| `get_page_info` | 返回当前页 URL/标题/viewport | ⬜ |
-| `capture_screenshot`（整页） | 返回可视区截图 | ⬜ |
-| `capture_screenshot`（元素） | 带 selector，返回裁剪到该元素的图 | ⬜ |
-| `execute_js` | 执行表达式返回结果 | ⬜ |
-| `get_dom_snapshot` | 返回精简 DOM 树 | ⬜ |
-| `inspect_element` | 返回样式/盒模型 | ⬜ |
-| `highlight_element` / `clear_highlights` | 页面出现/消失高亮框 | ⬜ |
-| `get_console_logs` / `get_errors` | 返回捕获的日志/报错 | ⬜ |
-| `get_network_requests` | 返回注入式捕获的请求 | ⬜ |
 
 ## Phase 2 — CDP 采集补全
 

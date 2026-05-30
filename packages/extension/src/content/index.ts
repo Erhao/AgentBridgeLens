@@ -5,6 +5,9 @@ import { startCapture as startConsoleCapture, getConsoleLogs, getErrors } from "
 import { startCapture as startNetworkCapture, getNetworkRequests } from "./network-capture";
 import { startPerfCapture, getPerformanceMetrics } from "./performance";
 import { getAccessibilityTree } from "./accessibility";
+import { markElements, visualizeLayout, showResponsiveFrame, clearOverlays } from "./overlays";
+import { startRecording, stopRecording, replayActions, type RecordedAction } from "./recorder";
+import { showHud, hideHud, updateHud } from "./hud";
 
 startConsoleCapture();
 startNetworkCapture();
@@ -26,6 +29,17 @@ const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
   get_performance_metrics: () => getPerformanceMetrics(),
   get_accessibility_tree: (p) =>
     getAccessibilityTree(p.selector as string | undefined, p.maxDepth as number | undefined),
+  mark_elements: (p) =>
+    markElements(p.selectors as string[], p.color as string | undefined, p.label as string | undefined),
+  visualize_layout: () => visualizeLayout(),
+  show_responsive_frame: (p) => showResponsiveFrame(p.width as number | undefined),
+  clear_overlays: () => clearOverlays(),
+  start_recording: () => startRecording(),
+  stop_recording: () => stopRecording(),
+  replay_actions: (p) => replayActions(p.actions as RecordedAction[]),
+  show_hud: () => showHud(),
+  hide_hud: () => hideHud(),
+  update_hud: (p) => updateHud(p.text as string),
 };
 
 chrome.runtime.onMessage.addListener(
@@ -35,17 +49,18 @@ chrome.runtime.onMessage.addListener(
     const handler = handlers[message.tool];
     const response: ContentResponse = { type: "bridgelens-response", id: message.id };
 
-    if (!handler) {
-      response.error = { message: `Unknown tool: ${message.tool}` };
-    } else {
-      try {
-        response.result = handler(message.params);
-      } catch (err) {
-        response.error = { message: err instanceof Error ? err.message : String(err) };
+    void (async () => {
+      if (!handler) {
+        response.error = { message: `Unknown tool: ${message.tool}` };
+      } else {
+        try {
+          response.result = await handler(message.params);
+        } catch (err) {
+          response.error = { message: err instanceof Error ? err.message : String(err) };
+        }
       }
-    }
-
-    chrome.runtime.sendMessage(response);
+      chrome.runtime.sendMessage(response);
+    })();
   }
 );
 

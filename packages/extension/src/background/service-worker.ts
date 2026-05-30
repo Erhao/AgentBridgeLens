@@ -140,9 +140,34 @@ async function cropDataUrl(
   return `data:image/png;base64,${btoa(binary)}`;
 }
 
+/** 向 Side Panel 等扩展页面广播消息（无接收方时静默忽略）。 */
+function broadcast(message: unknown): void {
+  chrome.runtime.sendMessage(message).catch(() => {
+    /* no side panel open */
+  });
+}
+
+const pendingConfirms = new Map<string, (choice: string) => void>();
+
+function requestConfirmation(message: string, options: string[]): Promise<unknown> {
+  return new Promise((resolve) => {
+    const cid = crypto.randomUUID();
+    pendingConfirms.set(cid, (choice) => resolve({ choice }));
+    broadcast({ type: "bridgelens-confirm", cid, message, options });
+  });
+}
+
 async function handleToolCall(request: BridgeRequest): Promise<unknown> {
   const { tool, params } = request;
+
+  if (tool === "request_user_confirmation") {
+    broadcast({ type: "bridgelens-activity", tool, ts: Date.now() });
+    const options = (params.options as string[] | undefined) || ["确认", "取消"];
+    return requestConfirmation(params.message as string, options);
+  }
+
   const tab = await getActiveTab();
+  broadcast({ type: "bridgelens-activity", tool, ts: Date.now() });
 
   switch (tool) {
     case "capture_screenshot": {
@@ -200,6 +225,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "bridgelens-get-status") {
     sendResponse({ connected: ws?.readyState === WebSocket.OPEN, url: currentUrl });
+  } else if (message?.type === "bridgelens-confirm-result") {
+    const fn = pendingConfirms.get(message.cid);
+    if (fn) {
+      pendingConfirms.delete(message.cid);
+      fn(message.choice);
+    }
   }
 });
 

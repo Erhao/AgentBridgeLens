@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentBridgeLens</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 12px;
+        color: #1f2933;
+        font-size: 13px;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 8px;
+      }
+      .status {
+        font-size: 12px;
+        padding: 5px 8px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        background: #f0f2f5;
+      }
+      .status.ok {
+        background: #e3f9e5;
+        color: #207227;
+      }
+      .status.bad {
+        background: #fff0f0;
+        color: #ab1c1c;
+      }
+      h2 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #7b8794;
+        margin: 14px 0 6px;
+      }
+      #confirm {
+        display: none;
+        border: 1px solid #ffd79a;
+        background: #fff8ec;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 12px;
+      }
+      #confirm p {
+        margin: 0 0 8px;
+      }
+      #confirm .options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      #confirm button {
+        flex: 1 0 auto;
+        padding: 6px 10px;
+        border: none;
+        border-radius: 6px;
+        background: #4a90d9;
+        color: #fff;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      #confirm button:hover {
+        background: #3a7bc0;
+      }
+      #log {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 60vh;
+        overflow: auto;
+      }
+      #log li {
+        padding: 4px 6px;
+        border-bottom: 1px solid #eef1f4;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      #log li .t {
+        color: #9aa5b1;
+        flex: 0 0 auto;
+      }
+      .empty {
+        color: #9aa5b1;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AgentBridgeLens</h1>
+    <div id="status" class="status">检查连接中…</div>
+
+    <div id="confirm">
+      <p id="confirm-msg"></p>
+      <div class="options" id="confirm-options"></div>
+    </div>
+
+    <h2>Agent 活动</h2>
+    <ul id="log">
+      <li class="empty">等待 agent 调用…</li>
+    </ul>
+
+    <script type="module" src="./panel.ts"></script>
+  </body>
+</html>

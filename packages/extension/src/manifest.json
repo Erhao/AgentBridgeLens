@@ -7,11 +7,15 @@
     "activeTab",
     "scripting",
     "debugger",
-    "storage"
+    "storage",
+    "sidePanel"
   ],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "src/popup/index.html"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
   },
   "background": {
     "service_worker": "src/background/service-worker.ts",

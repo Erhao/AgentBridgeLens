@@ -58,8 +58,8 @@ export class WsRelay {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Tool '${tool}' timed out after 30s`));
-      }, 30_000);
+        reject(new Error(`Tool '${tool}' timed out after 120s`));
+      }, 120_000);
 
       this.pending.set(id, {
         resolve: (v) => {

@@ -229,5 +229,141 @@ export function createMcpServer(relay: WsRelay): McpServer {
     }
   );
 
+  // ---- Phase 4: 视觉增强 ----
+
+  server.tool(
+    "mark_elements",
+    "Mark/annotate a set of elements on the page with colored boxes (e.g. to flag changed regions)",
+    {
+      selectors: z.array(z.string()).describe("CSS selectors of elements to mark"),
+      color: z.string().optional().describe("Box color (CSS color). Default '#ff3b30'"),
+      label: z.string().optional().describe("Optional label text shown on each box"),
+    },
+    async ({ selectors, color, label }) => {
+      const result = await relay.send("mark_elements", { selectors, color, label });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "visualize_layout",
+    "Outline elements whose content is clipped by overflow (layout debugging)",
+    {},
+    async () => {
+      const result = await relay.send("visualize_layout", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "show_responsive_frame",
+    "Overlay a target-viewport-width frame and list elements wider than it (responsive debugging)",
+    {
+      width: z.number().optional().describe("Target viewport width in px. Default 375."),
+    },
+    async ({ width }) => {
+      const result = await relay.send("show_responsive_frame", { width });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "clear_overlays",
+    "Remove all visual overlays (marks / layout / responsive frame)",
+    {},
+    async () => {
+      const result = await relay.send("clear_overlays", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // ---- Phase 4: 操作录制与回放 ----
+
+  server.tool(
+    "start_recording",
+    "Start recording user interactions (clicks, inputs, scrolls) on the page",
+    {},
+    async () => {
+      const result = await relay.send("start_recording", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "stop_recording",
+    "Stop recording and return the captured action sequence",
+    {},
+    async () => {
+      const result = await relay.send("stop_recording", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "replay_actions",
+    "Replay a previously recorded action sequence on the current page",
+    {
+      actions: z
+        .array(z.record(z.string(), z.unknown()))
+        .describe("Action sequence, as returned by stop_recording"),
+    },
+    async ({ actions }) => {
+      const result = await relay.send("replay_actions", { actions });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // ---- Phase 4: HUD 状态面板 ----
+
+  server.tool(
+    "show_hud",
+    "Show a small on-page HUD panel in the bottom-right corner",
+    {},
+    async () => {
+      const result = await relay.send("show_hud", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "hide_hud",
+    "Hide the on-page HUD panel",
+    {},
+    async () => {
+      const result = await relay.send("hide_hud", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "update_hud",
+    "Update the HUD status text (e.g. to show what the agent is currently doing)",
+    {
+      text: z.string().describe("Status text to display in the HUD"),
+    },
+    async ({ text }) => {
+      const result = await relay.send("update_hud", { text });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // ---- Phase 4: 交互式确认面板 ----
+
+  server.tool(
+    "request_user_confirmation",
+    "Ask the user a question in the side panel and wait for their choice (the AgentBridgeLens side panel must be open). Useful for confirming a fix or choosing between options.",
+    {
+      message: z.string().describe("The question/prompt shown to the user"),
+      options: z
+        .array(z.string())
+        .optional()
+        .describe("Choice buttons. Default ['确认', '取消']"),
+    },
+    async ({ message, options }) => {
+      const result = await relay.send("request_user_confirmation", { message, options });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
   return server;
 }

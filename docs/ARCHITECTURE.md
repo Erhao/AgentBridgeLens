@@ -95,11 +95,18 @@ Bridge Server
 Claude Code  ← 拿到页面信息
 ```
 
+### 2.5 Side Panel（交互式确认）
+
+扩展还有第四个 UI 面：**Side Panel**（`src/sidepanel/`），用于 agent 与用户的双向交互。
+- Service Worker 每次处理工具调用时，向面板**广播**一条活动消息（`chrome.runtime.sendMessage`），面板实时显示「Agent 活动」日志。
+- `request_user_confirmation` 工具：Service Worker 生成一个待确认项（`pendingConfirms`），广播给面板显示「问题 + 选项按钮」；用户点击后面板回传选择，Service Worker 解析对应的 pending promise，结果经 WebSocket 回到 agent。
+- 因为扩展无法在无用户手势时强行打开侧栏，**该工具要求用户已打开 Side Panel**；WS 调用超时已从 30s 放宽到 **120s** 以容纳人工确认和长回放。
+
 ---
 
 ## 3. 可用的 MCP 工具
 
-由 `packages/bridge/src/mcp-server.ts` 定义，共 12 个：
+由 `packages/bridge/src/mcp-server.ts` 定义，共 29 个（下表列出主要的；Phase 4 视觉/录制/HUD/确认工具见下方分组）：
 
 | 工具 | 功能 | 处理位置 |
 |------|------|---------|
@@ -115,6 +122,16 @@ Claude Code  ← 拿到页面信息
 | `get_errors` | 仅获取 error 级别日志（含未捕获异常/Promise 拒绝） | Content Script |
 | `trace_element_to_source` | DOM 元素 → 组件源码文件+行号（React/Vue 开发构建） | MAIN world 注入 |
 | `trace_style_to_source` | 元素匹配的 CSS 规则 → 所属样式表 | MAIN world 注入 |
+| `trace_error_to_source` | 错误堆栈 → 原始源码文件/行号（source map） | **Bridge 本地**（抓 bundle+map） |
+| `get_performance_metrics` | navigation timing / FCP / LCP / CLS / 内存 | Content Script |
+| `get_accessibility_tree` | 简化无障碍树（role + name） | Content Script |
+| `start/stop/get_cdp_network` | 基于 chrome.debugger(CDP) 的网络抓取 | Service Worker (debugger) |
+| `mark_elements` / `visualize_layout` / `show_responsive_frame` / `clear_overlays` | 视觉叠加 | Content Script |
+| `start_recording` / `stop_recording` / `replay_actions` | 操作录制与回放 | Content Script |
+| `show_hud` / `update_hud` / `hide_hud` | 页面状态 HUD | Content Script |
+| `request_user_confirmation` | 侧边栏问询用户并等待选择 | Service Worker ↔ Side Panel |
+
+> 注意 `trace_error_to_source` 是唯一**不经扩展**、完全在 Bridge 本地完成的工具：它直接抓取 bundle 与 `.map` 做 source map 反查。其余工具都最终落到浏览器执行。
 
 ---
 

@@ -72,8 +72,16 @@ Use bridgelens to capture a screenshot of the current page
 | `get_console_logs` | Get captured console logs |
 | `get_network_requests` | Get captured network requests |
 | `get_errors` | Get only error-level console entries |
+| `get_performance_metrics` | Navigation timing, FCP, LCP, CLS, JS heap |
+| `get_accessibility_tree` | Simplified role/name accessibility tree |
 | `trace_element_to_source` | Trace a DOM element to its component source file/line (React/Vue dev builds) |
 | `trace_style_to_source` | Trace which CSS rules apply and which stylesheet they come from |
+| `trace_error_to_source` | Resolve an error stack to original source via source maps |
+| `start_cdp_network` / `stop_cdp_network` / `get_cdp_network` | Richer network capture via chrome.debugger (CDP) |
+| `mark_elements` / `visualize_layout` / `show_responsive_frame` / `clear_overlays` | Visual overlays |
+| `start_recording` / `stop_recording` / `replay_actions` | Record & replay user interactions |
+| `show_hud` / `update_hud` / `hide_hud` | On-page status HUD |
+| `request_user_confirmation` | Ask the user a question in the side panel and await their choice |
 
 ## Development
 
@@ -96,18 +104,30 @@ packages/
 │       ├── index.ts         # Entry point
 │       ├── mcp-server.ts    # MCP tool definitions
 │       ├── ws-relay.ts      # WebSocket server
+│       ├── error-tracer.ts  # Error stack → source map resolution
 │       └── protocol.ts      # Message types
 └── extension/           # Chrome Extension (Manifest V3)
     └── src/
         ├── manifest.json
         ├── background/
-        │   └── service-worker.ts   # WS connection + message routing
+        │   ├── service-worker.ts   # WS connection + routing + side-panel plumbing
+        │   ├── source-tracer.ts    # MAIN-world React/Vue source tracing
+        │   └── cdp-network.ts      # chrome.debugger (CDP) network capture
         ├── content/
         │   ├── index.ts            # Tool handler dispatch
-        │   ├── dom-inspector.ts    # DOM snapshot, inspect, JS exec
-        │   ├── highlighter.ts      # Visual overlay highlights
+        │   ├── dom-inspector.ts    # DOM snapshot, inspect, JS exec, element rect
+        │   ├── highlighter.ts      # Element highlights
+        │   ├── overlays.ts         # Mark / layout / responsive overlays
+        │   ├── recorder.ts         # Record & replay user actions
+        │   ├── hud.ts              # On-page status HUD
+        │   ├── selector.ts         # Stable CSS selector generation
         │   ├── console-capture.ts  # Console log interception
-        │   └── network-capture.ts  # Fetch/XHR interception
+        │   ├── network-capture.ts  # Fetch/XHR interception
+        │   ├── performance.ts      # Performance metrics (FCP/LCP/CLS)
+        │   └── accessibility.ts    # Accessibility tree
+        ├── popup/                  # Toolbar popup: bridge host/port config
+        ├── sidepanel/              # Side panel: activity log + confirmations
         └── shared/
-            └── protocol.ts         # Message types
+            ├── protocol.ts         # Message types
+            └── config.ts           # Bridge connection config (storage)
 ```

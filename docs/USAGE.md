@@ -135,5 +135,13 @@ Claude 大致会这么做：
 | `get_console_logs` | 「控制台有报错吗」 |
 | `get_network_requests` | 「页面发了哪些请求」 |
 | `get_errors` | 「只看报错」 |
+| `get_performance_metrics` | 「页面性能怎么样」 |
+| `get_accessibility_tree` | 「页面的无障碍结构是怎样的」 |
 | `trace_element_to_source` | 「这个元素是哪个组件渲染的，在哪个文件」 |
 | `trace_style_to_source` | 「这个样式是从哪个 CSS 文件来的」 |
+| `trace_error_to_source` | 「把这个报错堆栈还原到源码行号」 |
+| `start_cdp_network` / `get_cdp_network` | 「用 CDP 抓一下网络请求」（会显示调试横幅） |
+| `mark_elements` / `visualize_layout` / `show_responsive_frame` | 「把改动的地方圈出来」/「哪里被截断了」/「小屏会不会溢出」 |
+| `start_recording` / `replay_actions` | 「录一下我的操作」/「把刚才的操作重放一遍」 |
+| `show_hud` / `update_hud` | 「在页面上显示你正在做什么」 |
+| `request_user_confirmation` | agent 主动在侧边栏问你「这样改对吗」（需打开侧边栏） |

@@ -44,7 +44,7 @@
 | `get_accessibility_tree` | 返回带 role/name 的简化无障碍树 | ✅（nav 子树 role/name 正确） |
 | `get_errors` | 仅返回 error 级日志 | ✅（空数组，页面无报错） |
 | `start_cdp_network` | 调用后标签页出现「DevTools 调试」横幅 | ✅（attached + tabId） |
-| `get_cdp_network` | start 后刷新页面，返回完整请求（含 status/耗时/失败） | ⚠️ 结构正常但 count=0；**待刷新页面触发真实请求再验** |
+| `get_cdp_network` | start 后刷新页面，返回完整请求（含 status/耗时/失败） | ✅（dev.to 刷新抓到 16 请求，含 status/type/mimeType/耗时；覆盖 F2 缺口） |
 | `stop_cdp_network` | 调试横幅消失，debugger 解除 | ✅（detached） |
 | CDP 与 DevTools 互斥 | 已开 DevTools 时 start 应报错而非崩溃 | ⬜ |
 
@@ -56,7 +56,7 @@
 | `trace_element_to_source`（React dev） | 返回正确组件文件+行号 | ⬜ 需 React dev 页面 |
 | `trace_element_to_source`（Vue dev） | 返回 `__file` | ⬜ 需 Vue dev 页面 |
 | `trace_style_to_source` | 返回元素匹配的 CSS 规则及所属样式表 | ✅（命中 h1 规则，匹配 font-size） |
-| 跨域样式表 | 应标注「跨域不可读」而非崩溃 | ⬜（本页未触发跨域分支） |
+| 跨域样式表 | 应标注「跨域不可读」而非崩溃 | ✅（dev.to 的 assets.dev.to 跨域 CSS 正确标注不可读） |
 | `trace_error_to_source`（无 map） | 解析堆栈 + 标注「无 source map」 | ✅（正确解析帧并回退） |
 | `trace_error_to_source`（有 map） | 还原到原始 .tsx/.vue 行号 | ⬜ 需带 sourcemap 的 dev app |
 
@@ -70,10 +70,20 @@
 | `show_responsive_frame` | 叠加目标宽度蓝框 + 列出更宽元素 | ✅ 截图确认（375px 蓝框 + 220 超宽元素） |
 | `clear_overlays` | 清除上述所有叠加层 | ✅ |
 | `show_hud`/`update_hud` | 右下角面板出现/更新文字 | ✅ 截图确认 |
-| `hide_hud` | 面板消失 | ❌ 见 F3（调用被校验层拒绝） |
-| `start_recording`/`stop_recording` | 录制点击/输入/滚动，返回 action 序列 | ⬜ 需用户在页面操作 |
-| `replay_actions` | 把序列在页面回放，控件状态变化正确 | ⬜ 需先录制 |
-| Side Panel 连接状态 / 活动日志 | 打开侧栏显示已连 + 每次调用新增日志 | ⬜ 需用户打开侧栏 |
-| `request_user_confirmation` | 侧栏弹出问题+按钮，点击后 agent 收到选择 | ⬜ 需用户打开侧栏并点选 |
+| `hide_hud` | 面板消失 | ✅（返回 hidden，截图确认消失；F3 偶发，复测正常） |
+| `start_recording`/`stop_recording` | 录制点击/输入/滚动，返回 action 序列 | ✅（dev.to 抓到 22 个动作：click/input/change/scroll + 选择器） |
+| `replay_actions` | 把序列在页面回放，控件状态变化正确 | ✅（回放 5/5，截图确认搜索框被填入 "lifhudisau"） |
+| Side Panel 连接状态 / 活动日志 | 打开侧栏显示已连 + 每次调用新增日志 | ✅（侧栏正常打开，确认面板往返工作） |
+| `request_user_confirmation` | 侧栏弹出问题+按钮，点击后 agent 收到选择 | ✅（用户点「看起来对 ✅」，agent 收到 choice） |
+| token 鉴权 | 错 token 拒连，对 token 放行 | ✅（端到端确认） |
+| F4 连接保活 | 心跳后连接常驻、不再频繁掉线 | ✅（重启后多轮调用连续成功，未再掉线） |
 
 > 注意：`request_user_confirmation` 依赖 Side Panel 处于打开状态（扩展无法在无用户手势时强行打开侧栏）。WS 调用超时已从 30s 放宽到 120s 以容纳人工确认与长回放。
+
+## 仍未覆盖（需特定条件，非 bug）
+
+- `execute_js` 在**非 CSP 页面**的正常执行（F1 在严格 CSP 页失败；普通页应可，待补测；彻底解决需 CDP `Runtime.evaluate`）
+- `trace_element_to_source` 返回**真实组件文件+行号**（需本地 React/Vue **dev** 页；目前只验了优雅回退）
+- `trace_error_to_source` **真实 sourcemap 还原**（需带 .map 的 dev 堆栈）
+- `visualize_layout` 实际**画出橙框**（需含 overflow 截断内容的页面）
+- CDP 与已开 DevTools 的**互斥报错**路径

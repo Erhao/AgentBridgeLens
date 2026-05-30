@@ -1,27 +1,15 @@
-const statusEl = document.getElementById("status") as HTMLDivElement;
+import { mountControls } from "../shared/panel-ui";
+
+// 连接配置 + 目标标签页控件，与点击扩展图标弹出的 popup 完全一致。
+mountControls(document.getElementById("controls")!);
+
+// —— side panel 特有：Agent 活动日志 + 交互式确认 ——
 const logEl = document.getElementById("log") as HTMLUListElement;
 const confirmEl = document.getElementById("confirm") as HTMLDivElement;
 const confirmMsg = document.getElementById("confirm-msg") as HTMLParagraphElement;
 const confirmOptions = document.getElementById("confirm-options") as HTMLDivElement;
 
 let logCount = 0;
-
-function refreshStatus() {
-  chrome.runtime.sendMessage({ type: "bridgelens-get-status" }, (res) => {
-    if (chrome.runtime.lastError || !res) {
-      statusEl.textContent = "状态未知";
-      statusEl.className = "status";
-      return;
-    }
-    if (res.connected) {
-      statusEl.textContent = `已连接 ${res.url}`;
-      statusEl.className = "status ok";
-    } else {
-      statusEl.textContent = "未连接（确认 Bridge Server 已启动）";
-      statusEl.className = "status bad";
-    }
-  });
-}
 
 function appendLog(tool: string, ts: number) {
   if (logCount === 0) logEl.innerHTML = "";
@@ -60,6 +48,3 @@ chrome.runtime.onMessage.addListener((message) => {
     showConfirm(message.cid, message.message, message.options);
   }
 });
-
-refreshStatus();
-setInterval(refreshStatus, 2000);

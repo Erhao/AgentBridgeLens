@@ -12,32 +12,6 @@
         color: #1f2933;
         font-size: 13px;
       }
-      h1 {
-        font-size: 14px;
-        margin: 0 0 8px;
-      }
-      .status {
-        font-size: 12px;
-        padding: 5px 8px;
-        border-radius: 6px;
-        margin-bottom: 12px;
-        background: #f0f2f5;
-      }
-      .status.ok {
-        background: #e3f9e5;
-        color: #207227;
-      }
-      .status.bad {
-        background: #fff0f0;
-        color: #ab1c1c;
-      }
-      h2 {
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #7b8794;
-        margin: 14px 0 6px;
-      }
       #confirm {
         display: none;
         border: 1px solid #ffd79a;
@@ -67,11 +41,18 @@
       #confirm button:hover {
         background: #3a7bc0;
       }
+      .sec {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #7b8794;
+        margin: 14px 0 6px;
+      }
       #log {
         list-style: none;
         margin: 0;
         padding: 0;
-        max-height: 60vh;
+        max-height: 30vh;
         overflow: auto;
       }
       #log li {
@@ -94,15 +75,14 @@
     </style>
   </head>
   <body>
-    <h1>AgentBridgeLens</h1>
-    <div id="status" class="status">检查连接中…</div>
-
     <div id="confirm">
       <p id="confirm-msg"></p>
       <div class="options" id="confirm-options"></div>
     </div>
 
-    <h2>Agent 活动</h2>
+    <div id="controls"></div>
+
+    <h2 class="sec">Agent 活动</h2>
     <ul id="log">
       <li class="empty">等待 agent 调用…</li>
     </ul>

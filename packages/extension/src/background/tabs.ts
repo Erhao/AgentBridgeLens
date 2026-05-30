@@ -21,6 +21,20 @@ export async function getNewTabPolicy(): Promise<NewTabPolicy> {
   return newTabPolicy === "follow" ? "follow" : "stay";
 }
 
+async function getTabPolicies(): Promise<Record<string, NewTabPolicy>> {
+  const { tabPolicies } = await chrome.storage.session.get("tabPolicies");
+  return tabPolicies && typeof tabPolicies === "object" ? tabPolicies : {};
+}
+
+/** 某目标 tab 的有效策略：优先用该目标的单独设置，否则用全局默认。 */
+async function getEffectivePolicy(targetId: number | null): Promise<NewTabPolicy> {
+  if (targetId !== null) {
+    const p = (await getTabPolicies())[String(targetId)];
+    if (p === "follow" || p === "stay") return p;
+  }
+  return getNewTabPolicy();
+}
+
 async function tabExists(id: number): Promise<boolean> {
   try {
     await chrome.tabs.get(id);
@@ -93,7 +107,7 @@ export function registerTabListeners() {
     if (typeof tab.id !== "number" || typeof tab.openerTabId !== "number") return;
     const target = await getTargetId();
     if (target === null || tab.openerTabId !== target) return;
-    if ((await getNewTabPolicy()) === "follow") {
+    if ((await getEffectivePolicy(target)) === "follow") {
       await setTargetId(tab.id); // 自动跟随到目标页打开的新标签
     }
     // stay 策略：不动目标；list_tabs 会用 openedByTarget 标记它供 agent 决策
@@ -101,5 +115,11 @@ export function registerTabListeners() {
 
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     if ((await getTargetId()) === tabId) await setTargetId(null);
+    // 清理该 tab 的单独策略设置
+    const tp = await getTabPolicies();
+    if (tp[String(tabId)]) {
+      delete tp[String(tabId)];
+      await chrome.storage.session.set({ tabPolicies: tp });
+    }
   });
 }

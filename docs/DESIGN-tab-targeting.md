@@ -41,9 +41,10 @@
 - content script 仅在扩展安装后加载/导航的 tab 自动注入；扩展安装前就打开的旧 tab 需刷新一次。
 - 无异步推送：要"等某 tab 变化"得 agent 轮询或用户给信号(`wait_for` 类工具留待后续)。
 
-## 后续优化（backlog，暂不实现）
-- popup 标签页列表显示区域加长（当前 max-height 偏短）。
-- 支持**针对单个目标标签页**单独设置「新标签策略」（目前是全局一个策略）。
+## 后续优化
+- ✅ popup 标签页列表显示区域加长（max-height 360px）。
+- ✅ 支持**针对单个目标标签页**单独设置「新标签策略」：每目标策略存 `storage.session.tabPolicies[tabId]`，有效策略 = 该目标设置 ?? 全局默认；UI 标注「（当前目标）/（默认）」。
+- ✅ side panel 与 popup 共用同一套「连接配置 + 目标标签页」控件（`shared/panel-ui.ts` 的 `mountControls`）；side panel 额外保留 Agent 活动日志 + 交互式确认。
 
 ## UI/UX
 - **popup**：连接状态下方加「目标标签页」区——当前目标显示、所有 tab 列表(按窗口分组、favicon+标题+域名+「设为目标」)、「取消固定」、新标签策略开关。

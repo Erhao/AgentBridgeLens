@@ -86,16 +86,18 @@
 
 | 功能 | 验证方法 | 状态 |
 |------|---------|------|
-| `list_tabs` | 返回所有窗口的所有 tab（含 isTarget/openedByTarget） | ⬜ |
-| `set_target_tab` / `get_target_tab` / `clear_target_tab` | 固定/查询/取消目标 | ⬜ |
-| 固定后切换标签页 | 切到别的 tab，工具仍操作被固定的那个 | ⬜ |
-| 工具 `tabId` 参数 | 显式传 tabId，操作指定 tab | ⬜ |
-| 后台 tab 读 DOM/截图 | 不切前台，对后台 tab `get_dom_snapshot`/截图（CDP）成功 | ⬜ |
-| 多 tab 并行抓包 | 同时对两个 tab `start_cdp_network` 互不干扰 | ⬜ |
-| 新标签策略 stay | 目标页打开新标签，目标不变，`list_tabs` 标 `openedByTarget` | ⬜ |
-| 新标签策略 follow | 切到 follow，目标页开新标签后目标自动转移 | ⬜ |
-| 目标关闭回退 | 关掉目标 tab，自动回到跟随激活 | ⬜ |
-| popup 标签页列表 | 弹窗列出 tab、点「设为目标」生效、🎯 标识 | ⬜ |
+| `list_tabs` | 返回所有窗口的所有 tab（含 isTarget/openedByTarget） | ✅（列出 10 个 tab，字段齐全） |
+| `set_target_tab` / `get_target_tab` / `clear_target_tab` | 固定/查询/取消目标 | ✅（pinned↔follow-active 切换正常） |
+| 固定后操作后台目标页 | 激活页停在 chrome://extensions，工具仍操作被固定的后台页 | ✅（截图返回 dev.to、get_page_info 返回 dev.to） |
+| 工具 `tabId` 参数 | 显式传 tabId，操作指定 tab | ✅（CDP 显式 tabId attach/抓包/detach） |
+| 后台 tab 截图（CDP） | 不切前台，对后台 tab 截图成功 | ✅（Page.captureScreenshot 截到后台 dev.to） |
+| 后台目标页 content-script 工具 | 后台目标页刷新后 get_page_info 成功 | ✅ |
+| 多 tab 并行 | 同时：A 用 content-script 工具、B 用 CDP 抓 72 请求，互不干扰 | ✅ |
+| 目标关闭/取消回退 | clear_target_tab → 回到跟随激活 | ✅ |
+| 新标签策略 follow / openedByTarget | 目标页开新标签后行为 | ⬜ 需点链接开新标签触发 |
+| popup 标签页列表 UI | 弹窗列出 tab、点「设为目标」、🎯 标识 | ⬜ 需肉眼确认 |
+
+> 已知限制复现：reload 扩展后，**reload 之前就打开的旧标签页** content script 会失效，content-script 类工具（get_page_info 等）超时，需刷新该 tab 一次；CDP 类工具（截图/抓包/trace/execute_js 回退）不受影响。本次验证已观察到并确认。
 
 ## 仍未覆盖（需特定条件，非 bug）
 

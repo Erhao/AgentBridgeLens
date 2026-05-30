@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentBridgeLens</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        width: 260px;
+        margin: 0;
+        padding: 14px;
+        color: #1f2933;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 10px;
+      }
+      .status {
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        background: #f0f2f5;
+      }
+      .status.ok {
+        background: #e3f9e5;
+        color: #207227;
+      }
+      .status.bad {
+        background: #fff0f0;
+        color: #ab1c1c;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 5px 6px;
+        margin-top: 3px;
+        border: 1px solid #cbd2d9;
+        border-radius: 5px;
+        font-size: 13px;
+      }
+      button {
+        width: 100%;
+        padding: 7px;
+        margin-top: 4px;
+        border: none;
+        border-radius: 6px;
+        background: #4a90d9;
+        color: #fff;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #3a7bc0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AgentBridgeLens</h1>
+    <div id="status" class="status">检查连接中…</div>
+    <label>
+      Host
+      <input id="host" type="text" placeholder="127.0.0.1" />
+    </label>
+    <label>
+      Port
+      <input id="port" type="number" min="1" max="65535" placeholder="19222" />
+    </label>
+    <button id="save">保存并重连</button>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

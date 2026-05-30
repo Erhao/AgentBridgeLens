@@ -4,22 +4,25 @@ import type {
   ContentRequest,
   ContentResponse,
 } from "../shared/protocol";
+import { getBridgeConfig } from "../shared/config";
 
-const WS_URL = "ws://127.0.0.1:19222";
 const RECONNECT_INTERVAL = 3000;
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let currentUrl = "";
 
-function connect() {
+async function connect() {
   if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
     return;
   }
 
-  ws = new WebSocket(WS_URL);
+  const { host, port } = await getBridgeConfig();
+  currentUrl = `ws://${host}:${port}`;
+  ws = new WebSocket(currentUrl);
 
   ws.onopen = () => {
-    console.log("[BridgeLens] Connected to bridge server");
+    console.log(`[BridgeLens] Connected to bridge server at ${currentUrl}`);
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
@@ -116,5 +119,30 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
       return sendToContentScript(tab.id!, tool, params);
   }
 }
+
+function forceReconnect() {
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+    ws = null;
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  connect();
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.bridgeHost || changes.bridgePort)) {
+    forceReconnect();
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "bridgelens-get-status") {
+    sendResponse({ connected: ws?.readyState === WebSocket.OPEN, url: currentUrl });
+  }
+});
 
 connect();

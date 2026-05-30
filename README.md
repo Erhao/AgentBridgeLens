@@ -11,6 +11,9 @@ AI Agent (Claude Code) ←─stdio/MCP─→ Bridge Server ←─WebSocket─→
 - **Bridge Server**: Thin MCP relay (~200 lines) — translates MCP tool calls to WebSocket messages
 - **Chrome Extension**: Manifest V3 — DOM inspection, screenshots, visual overlays, console/network capture
 
+> 详细架构、组件通信链路与配置说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+> 面向用户的上手与使用指南见 [docs/USAGE.md](docs/USAGE.md)。
+
 ## Quick Start
 
 ### 1. Install dependencies

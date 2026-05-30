@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { WsRelay } from "./ws-relay.js";
+import { traceErrorToSource } from "./error-tracer.js";
 
 export function createMcpServer(relay: WsRelay): McpServer {
   const server = new McpServer({
@@ -156,6 +157,74 @@ export function createMcpServer(relay: WsRelay): McpServer {
     },
     async ({ selector, property }) => {
       const result = await relay.send("trace_style_to_source", { selector, property });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "trace_error_to_source",
+    "Resolve a JS error stack trace back to original source files/lines via source maps (runs in the bridge, fetches the bundle and .map)",
+    {
+      stack: z.string().describe("The error stack string (e.g. from Error.stack or get_errors output)"),
+    },
+    async ({ stack }) => {
+      const result = await traceErrorToSource(stack);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_performance_metrics",
+    "Get page performance metrics: navigation timing, FCP, LCP, CLS, JS heap memory",
+    {},
+    async () => {
+      const result = await relay.send("get_performance_metrics", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_accessibility_tree",
+    "Get a simplified accessibility tree (roles + accessible names) of the page or a subtree",
+    {
+      selector: z.string().optional().describe("CSS selector for subtree root. Omit for full page."),
+      maxDepth: z.number().optional().describe("Maximum depth to traverse. Default 12."),
+    },
+    async ({ selector, maxDepth }) => {
+      const result = await relay.send("get_accessibility_tree", { selector, maxDepth });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "start_cdp_network",
+    "Attach the Chrome debugger to the active tab and start capturing network traffic via CDP. Shows a debugging banner; mutually exclusive with open DevTools.",
+    {},
+    async () => {
+      const result = await relay.send("start_cdp_network", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "stop_cdp_network",
+    "Detach the Chrome debugger and stop CDP network capture",
+    {},
+    async () => {
+      const result = await relay.send("stop_cdp_network", {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_cdp_network",
+    "Get network requests captured via CDP (richer than get_network_requests; requires start_cdp_network first)",
+    {
+      urlPattern: z.string().optional().describe("Filter by URL substring"),
+      status: z.number().optional().describe("Filter by HTTP status code"),
+    },
+    async ({ urlPattern, status }) => {
+      const result = await relay.send("get_cdp_network", { urlPattern, status });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
   );

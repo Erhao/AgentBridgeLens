@@ -6,6 +6,7 @@ import type {
 } from "../shared/protocol";
 import { getBridgeConfig } from "../shared/config";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
+import { startCdpNetwork, stopCdpNetwork, getCdpNetwork } from "./cdp-network";
 
 const RECONNECT_INTERVAL = 3000;
 
@@ -162,6 +163,15 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
 
     case "trace_style_to_source":
       return runInMainWorld(tab.id!, traceStyleToSource, [params.selector, params.property]);
+
+    case "start_cdp_network":
+      return startCdpNetwork(tab.id!);
+
+    case "stop_cdp_network":
+      return stopCdpNetwork();
+
+    case "get_cdp_network":
+      return getCdpNetwork(params.urlPattern as string | undefined, params.status as number | undefined);
 
     default:
       return sendToContentScript(tab.id!, tool, params);

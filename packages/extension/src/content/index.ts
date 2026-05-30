@@ -3,9 +3,12 @@ import { getPageInfo, getDomSnapshot, inspectElement, executeJs, getElementRect 
 import { highlightElement, clearHighlights } from "./highlighter";
 import { startCapture as startConsoleCapture, getConsoleLogs, getErrors } from "./console-capture";
 import { startCapture as startNetworkCapture, getNetworkRequests } from "./network-capture";
+import { startPerfCapture, getPerformanceMetrics } from "./performance";
+import { getAccessibilityTree } from "./accessibility";
 
 startConsoleCapture();
 startNetworkCapture();
+startPerfCapture();
 
 const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
   get_page_info: () => getPageInfo(),
@@ -20,6 +23,9 @@ const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
   get_errors: () => getErrors(),
   get_network_requests: (p) =>
     getNetworkRequests(p.urlPattern as string | undefined, p.status as number | undefined),
+  get_performance_metrics: () => getPerformanceMetrics(),
+  get_accessibility_tree: (p) =>
+    getAccessibilityTree(p.selector as string | undefined, p.maxDepth as number | undefined),
 };
 
 chrome.runtime.onMessage.addListener(

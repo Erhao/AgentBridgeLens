@@ -6,7 +6,7 @@ import type {
 } from "../shared/protocol";
 import { getBridgeConfig } from "../shared/config";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
-import { startCdpNetwork, stopCdpNetwork, getCdpNetwork } from "./cdp-network";
+import { startCdpNetwork, stopCdpNetwork, getCdpNetwork, cdpEvaluate } from "./cdp-network";
 
 const RECONNECT_INTERVAL = 3000;
 
@@ -186,6 +186,18 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
       })) as { x: number; y: number; width: number; height: number; error?: string };
       if (rect.error || !rect.width || !rect.height) return { dataUrl };
       return { dataUrl: await cropDataUrl(dataUrl, rect) };
+    }
+
+    case "execute_js": {
+      // 先走 content script（快、无横幅）；若被页面 CSP 拦截，回退到 CDP（绕过 CSP）。
+      const res = (await sendToContentScript(tab.id!, "execute_js", params)) as {
+        value?: unknown;
+        error?: string;
+      };
+      if (res?.error && /content security policy|unsafe-eval|\beval\b/i.test(res.error)) {
+        return cdpEvaluate(tab.id!, params.code as string);
+      }
+      return res;
     }
 
     case "trace_element_to_source":

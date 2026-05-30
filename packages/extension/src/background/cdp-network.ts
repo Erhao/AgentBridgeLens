@@ -89,6 +89,41 @@ export async function stopCdpNetwork() {
   return { status: "detached", tabId };
 }
 
+/**
+ * 用 CDP Runtime.evaluate 在页面执行代码——可绕过页面 CSP（content script 的
+ * `new Function`/eval 会被严格 CSP 拦截，见 F1）。若该标签页已被 start_cdp_network
+ * 附加则复用，否则临时附加并在结束后解除（短暂闪一下调试横幅）。
+ */
+export async function cdpEvaluate(tabId: number, code: string) {
+  const reuse = attachedTabId === tabId;
+  if (!reuse) await chrome.debugger.attach({ tabId }, "1.3");
+  try {
+    const res = (await chrome.debugger.sendCommand({ tabId }, "Runtime.evaluate", {
+      expression: code,
+      returnByValue: true,
+      awaitPromise: true,
+    })) as {
+      result?: { value?: unknown };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    };
+    if (res.exceptionDetails) {
+      return {
+        error: res.exceptionDetails.exception?.description || res.exceptionDetails.text || "evaluation error",
+        viaCdp: true,
+      };
+    }
+    return { value: res.result?.value, viaCdp: true };
+  } finally {
+    if (!reuse) {
+      try {
+        await chrome.debugger.detach({ tabId });
+      } catch {
+        /* already detached */
+      }
+    }
+  }
+}
+
 export function getCdpNetwork(urlPattern?: string, status?: number) {
   let list = Array.from(records.values());
   if (urlPattern) list = list.filter((r) => r.url.includes(urlPattern));

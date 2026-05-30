@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
+    "icons": "node scripts/gen-icons.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

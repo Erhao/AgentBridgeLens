@@ -1,20 +1,42 @@
 import { WebSocketServer, WebSocket } from "ws";
+import type { IncomingMessage } from "node:http";
 import type { BridgeRequest, BridgeResponse } from "./protocol.js";
+
+export interface WsRelayOptions {
+  port: number;
+  /** Bind address. Use 0.0.0.0 to allow a Chrome extension on another machine to connect. */
+  host?: string;
+  /** Shared secret the extension must present as ?token=… . Strongly recommended when host != 127.0.0.1. */
+  token?: string;
+}
 
 export class WsRelay {
   private wss: WebSocketServer;
   private client: WebSocket | null = null;
+  private token?: string;
   private pending = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >();
 
-  constructor(port: number) {
-    this.wss = new WebSocketServer({ port, host: "127.0.0.1" });
+  constructor(options: WsRelayOptions) {
+    const host = options.host || "127.0.0.1";
+    this.token = options.token;
+    this.wss = new WebSocketServer({
+      port: options.port,
+      host,
+      // Reject unauthorized clients during the HTTP upgrade, before the WS
+      // handshake completes — so a bad token never reaches an open socket.
+      verifyClient: (info, done) => {
+        if (this.authorize(info.req)) return done(true);
+        console.error(`[BridgeLens] Rejected connection from ${info.req.socket.remoteAddress}: invalid token`);
+        done(false, 401, "Unauthorized");
+      },
+    });
 
-    this.wss.on("connection", (ws) => {
+    this.wss.on("connection", (ws, req: IncomingMessage) => {
       this.client = ws;
-      console.error(`[BridgeLens] Extension connected`);
+      console.error(`[BridgeLens] Extension connected from ${req.socket.remoteAddress}`);
 
       ws.on("message", (raw) => {
         const msg = JSON.parse(raw.toString()) as BridgeResponse;
@@ -38,7 +60,25 @@ export class WsRelay {
       });
     });
 
-    console.error(`[BridgeLens] WebSocket server listening on 127.0.0.1:${port}`);
+    const authNote = this.token ? "token required" : "no token";
+    if (host !== "127.0.0.1" && !this.token) {
+      console.error(
+        `[BridgeLens] WARNING: listening on ${host}:${options.port} with no BRIDGELENS_TOKEN — the browser-control channel is exposed to the network unauthenticated.`
+      );
+    }
+    console.error(`[BridgeLens] WebSocket server listening on ${host}:${options.port} (${authNote})`);
+  }
+
+  /** Validate the connecting extension's ?token= query against the configured token. */
+  private authorize(req: IncomingMessage): boolean {
+    if (!this.token) return true;
+    let provided: string | null = null;
+    try {
+      provided = new URL(req.url ?? "/", "ws://localhost").searchParams.get("token");
+    } catch {
+      provided = null;
+    }
+    return provided === this.token;
   }
 
   get connected(): boolean {

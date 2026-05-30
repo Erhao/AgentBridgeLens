@@ -19,9 +19,11 @@ async function connect() {
     return;
   }
 
-  const { host, port } = await getBridgeConfig();
+  const { host, port, token } = await getBridgeConfig();
+  // Display URL omits the token; the actual dial URL carries it as a query param.
   currentUrl = `ws://${host}:${port}`;
-  ws = new WebSocket(currentUrl);
+  const dialUrl = token ? `${currentUrl}?token=${encodeURIComponent(token)}` : currentUrl;
+  ws = new WebSocket(dialUrl);
 
   ws.onopen = () => {
     console.log(`[BridgeLens] Connected to bridge server at ${currentUrl}`);
@@ -217,7 +219,7 @@ function forceReconnect() {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.bridgeHost || changes.bridgePort)) {
+  if (area === "local" && (changes.bridgeHost || changes.bridgePort || changes.bridgeToken)) {
     forceReconnect();
   }
 });

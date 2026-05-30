@@ -1,6 +1,7 @@
 /**
  * popup 与 side panel 共用的「连接配置 + 目标标签页」控件。
  * mountControls(root) 注入样式 + 构建 DOM + 接好全部逻辑。
+ * 目标是一组（可固定多个）；每个固定目标行上单独设「新标签策略」。
  */
 import { getBridgeConfig, setBridgeConfig, DEFAULT_HOST, DEFAULT_PORT } from "./config";
 
@@ -16,11 +17,9 @@ const STYLE = `
   #bl-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
   #bl-save:hover { background: #3a7bc0; }
   .bl hr { border: none; border-top: 1px solid #eef1f4; margin: 14px 0 10px; }
-  .bl-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #7b8794; margin: 0 0 6px; }
+  .bl-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #7b8794; margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between; }
+  #bl-clear-all { text-transform: none; letter-spacing: 0; background: none; border: none; color: #4a90d9; cursor: pointer; font-size: 11px; padding: 0; }
   .bl-target { font-size: 12px; background: #eef4fb; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; word-break: break-all; }
-  .bl-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 6px; }
-  .bl-row select { flex: 1; padding: 4px; border: 1px solid #cbd2d9; border-radius: 5px; }
-  .bl-row button { width: auto; margin: 0; padding: 4px 8px; background: #6b7785; color: #fff; border: none; border-radius: 5px; font-size: 12px; cursor: pointer; }
   #bl-tablist { max-height: 360px; overflow: auto; border: 1px solid #eef1f4; border-radius: 6px; }
   .bl-tab { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-bottom: 1px solid #f3f5f7; font-size: 12px; }
   .bl-tab:last-child { border-bottom: none; }
@@ -28,8 +27,10 @@ const STYLE = `
   .bl-tab .meta { flex: 1; min-width: 0; }
   .bl-tab .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bl-tab .u { color: #9aa5b1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bl-tab button { width: auto; margin: 0; padding: 3px 7px; font-size: 11px; flex: 0 0 auto; background: #4a90d9; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-  .bl-tab .pin { background: #9aa5b1; color: #fff; border-radius: 4px; padding: 2px 6px; font-size: 11px; flex: 0 0 auto; }
+  .bl-tab button { width: auto; margin: 0; padding: 3px 7px; font-size: 11px; flex: 0 0 auto; border: none; border-radius: 4px; cursor: pointer; }
+  .bl-tab .pin-btn { background: #4a90d9; color: #fff; }
+  .bl-tab .unpin-btn { background: #9aa5b1; color: #fff; }
+  .bl-tab select { flex: 0 0 auto; font-size: 11px; padding: 2px; border: 1px solid #cbd2d9; border-radius: 4px; max-width: 92px; }
 `;
 
 const MARKUP = `
@@ -41,22 +42,17 @@ const MARKUP = `
     <input id="bl-token" type="password" placeholder="BRIDGELENS_TOKEN" autocomplete="off" /></label>
   <button id="bl-save">保存并重连</button>
   <hr />
-  <h2 class="bl-h2">目标标签页</h2>
+  <h2 class="bl-h2">目标标签页 <button id="bl-clear-all">全部取消</button></h2>
   <div id="bl-target" class="bl-target">跟随当前激活标签页</div>
-  <div class="bl-row">
-    <span id="bl-policy-label">新标签策略</span>
-    <select id="bl-policy">
-      <option value="stay">不跟随</option>
-      <option value="follow">自动跟随目标页新标签</option>
-    </select>
-    <button id="bl-clear-target">取消固定</button>
-  </div>
   <div id="bl-tablist"></div>
 `;
 
-async function getTargetId(): Promise<number | null> {
-  const { targetTabId } = await chrome.storage.session.get("targetTabId");
-  return typeof targetTabId === "number" ? targetTabId : null;
+async function getTargets(): Promise<number[]> {
+  const { targetTabIds } = await chrome.storage.session.get("targetTabIds");
+  return Array.isArray(targetTabIds) ? targetTabIds.filter((x) => typeof x === "number") : [];
+}
+async function setTargets(ids: number[]): Promise<void> {
+  await chrome.storage.session.set({ targetTabIds: ids });
 }
 async function getGlobalPolicy(): Promise<Policy> {
   const { newTabPolicy } = await chrome.storage.local.get("newTabPolicy");
@@ -65,6 +61,11 @@ async function getGlobalPolicy(): Promise<Policy> {
 async function getTabPolicies(): Promise<Record<string, Policy>> {
   const { tabPolicies } = await chrome.storage.session.get("tabPolicies");
   return tabPolicies && typeof tabPolicies === "object" ? tabPolicies : {};
+}
+async function setTabPolicy(tabId: number, policy: Policy): Promise<void> {
+  const tp = await getTabPolicies();
+  tp[String(tabId)] = policy;
+  await chrome.storage.session.set({ tabPolicies: tp });
 }
 
 export function mountControls(root: HTMLElement): void {
@@ -84,9 +85,7 @@ export function mountControls(root: HTMLElement): void {
   const saveBtn = root.querySelector<HTMLButtonElement>("#bl-save")!;
   const targetEl = root.querySelector<HTMLDivElement>("#bl-target")!;
   const tablistEl = root.querySelector<HTMLDivElement>("#bl-tablist")!;
-  const policyEl = root.querySelector<HTMLSelectElement>("#bl-policy")!;
-  const policyLabel = root.querySelector<HTMLSpanElement>("#bl-policy-label")!;
-  const clearBtn = root.querySelector<HTMLButtonElement>("#bl-clear-target")!;
+  const clearAllBtn = root.querySelector<HTMLButtonElement>("#bl-clear-all")!;
 
   function refreshStatus() {
     chrome.runtime.sendMessage({ type: "bridgelens-get-status" }, (res) => {
@@ -117,47 +116,30 @@ export function mountControls(root: HTMLElement): void {
     setTimeout(refreshStatus, 600);
   });
 
-  async function renderPolicy(targetId: number | null) {
-    const global = await getGlobalPolicy();
-    if (targetId === null) {
-      policyLabel.textContent = "新标签策略（默认）";
-      policyEl.value = global;
-    } else {
-      const tp = await getTabPolicies();
-      policyLabel.textContent = "新标签策略（当前目标）";
-      policyEl.value = tp[String(targetId)] ?? global;
-    }
-  }
-
-  policyEl.addEventListener("change", async () => {
-    const value = policyEl.value as Policy;
-    const targetId = await getTargetId();
-    if (targetId === null) {
-      await chrome.storage.local.set({ newTabPolicy: value }); // 全局默认
-    } else {
-      const tp = await getTabPolicies();
-      tp[String(targetId)] = value; // 仅对当前目标
-      await chrome.storage.session.set({ tabPolicies: tp });
-    }
+  clearAllBtn.addEventListener("click", async () => {
+    await setTargets([]);
+    renderTabs();
   });
 
   async function renderTabs() {
-    const targetId = await getTargetId();
+    const targets = await getTargets();
+    const policies = await getTabPolicies();
+    const fallback = await getGlobalPolicy();
     const tabs = await chrome.tabs.query({});
 
-    if (targetId === null) {
-      targetEl.textContent = "跟随当前激活标签页";
-    } else {
-      const t = tabs.find((x) => x.id === targetId);
-      targetEl.textContent = t ? `🎯 ${t.title || t.url || targetId}` : "（原目标已关闭，跟随激活页）";
-    }
-    await renderPolicy(targetId);
+    const liveTargets = targets.filter((id) => tabs.some((t) => t.id === id));
+    targetEl.textContent =
+      liveTargets.length === 0
+        ? "跟随当前激活标签页"
+        : `🎯 已固定 ${liveTargets.length} 个（无 tabId 调用时用最近活跃的那个）`;
 
     tablistEl.innerHTML = "";
     for (const t of tabs) {
       if (typeof t.id !== "number") continue;
+      const id = t.id;
+      const isTarget = targets.includes(id);
       const row = document.createElement("div");
-      row.className = "bl-tab" + (t.id === targetId ? " is-target" : "");
+      row.className = "bl-tab" + (isTarget ? " is-target" : "");
 
       const meta = document.createElement("div");
       meta.className = "meta";
@@ -175,29 +157,39 @@ export function mountControls(root: HTMLElement): void {
       meta.appendChild(url);
       row.appendChild(meta);
 
-      if (t.id === targetId) {
-        const tag = document.createElement("span");
-        tag.className = "pin";
-        tag.textContent = "目标";
-        row.appendChild(tag);
-      } else {
-        const btn = document.createElement("button");
-        btn.textContent = "设为目标";
-        const id = t.id;
-        btn.addEventListener("click", async () => {
-          await chrome.storage.session.set({ targetTabId: id });
+      if (isTarget) {
+        // 每个目标各自的新标签策略
+        const sel = document.createElement("select");
+        sel.innerHTML =
+          '<option value="stay">不跟随</option><option value="follow">跟随新标签</option>';
+        sel.value = policies[String(id)] ?? fallback;
+        sel.title = "该目标页打开新标签时的处理";
+        sel.addEventListener("change", () => setTabPolicy(id, sel.value as Policy));
+        row.appendChild(sel);
+
+        const unpin = document.createElement("button");
+        unpin.className = "unpin-btn";
+        unpin.textContent = "取消";
+        unpin.addEventListener("click", async () => {
+          await setTargets((await getTargets()).filter((x) => x !== id));
           renderTabs();
         });
-        row.appendChild(btn);
+        row.appendChild(unpin);
+      } else {
+        const pin = document.createElement("button");
+        pin.className = "pin-btn";
+        pin.textContent = "设为目标";
+        pin.addEventListener("click", async () => {
+          const cur = await getTargets();
+          if (!cur.includes(id)) cur.push(id);
+          await setTargets(cur);
+          renderTabs();
+        });
+        row.appendChild(pin);
       }
       tablistEl.appendChild(row);
     }
   }
-
-  clearBtn.addEventListener("click", async () => {
-    await chrome.storage.session.remove("targetTabId");
-    renderTabs();
-  });
 
   loadConfig();
   refreshStatus();

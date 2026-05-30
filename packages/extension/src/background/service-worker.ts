@@ -201,7 +201,7 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
     case "get_target_tab":
       return getTargetTab();
     case "clear_target_tab":
-      return clearTargetTab();
+      return clearTargetTab(params.tabId as number | undefined);
     case "request_user_confirmation": {
       const options = (params.options as string[] | undefined) || ["确认", "取消"];
       return requestConfirmation(params.message as string, options);

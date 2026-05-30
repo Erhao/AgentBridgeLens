@@ -26,12 +26,14 @@ export function createMcpServer(relay: WsRelay): McpServer {
     server.tool(name, description, schema, async (args) => asText(await relay.send(name, args)));
 
   // ---- 标签页定位 ----
-  plain("list_tabs", "List all open tabs across all windows (tabId/title/url/active/isTarget/openedByTarget). Use this to pick a tab to operate on.");
-  plain("set_target_tab", "Pin a tab as the target; all subsequent tools default to it regardless of which tab is focused.", {
-    tabId: z.number().describe("Tab id to pin as target (from list_tabs)"),
+  plain("list_tabs", "List all open tabs across all windows (tabId/title/url/active/isTarget/openedByTarget). Multiple tabs can be pinned as targets; operate on any tab by passing its tabId.");
+  plain("set_target_tab", "Pin a tab into the target set (multiple tabs can be pinned). When a tool is called without tabId, the most-recently-active pinned tab is used.", {
+    tabId: z.number().describe("Tab id to pin (from list_tabs)"),
   });
-  plain("get_target_tab", "Get the currently pinned target tab (or follow-active mode if none).");
-  plain("clear_target_tab", "Unpin the target tab; tools fall back to the active tab.");
+  plain("get_target_tab", "Get the set of pinned target tabs and which one is the current default (follow-active if none pinned).");
+  plain("clear_target_tab", "Unpin a target tab, or clear all pinned targets if tabId is omitted.", {
+    tabId: z.number().optional().describe("Tab id to unpin. Omit to clear all."),
+  });
 
   // ---- 看页面 / 抓现状 ----
   page("get_page_info", "Get current page URL, title, and meta information");

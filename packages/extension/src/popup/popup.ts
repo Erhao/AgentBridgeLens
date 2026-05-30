@@ -2,6 +2,7 @@ import { getBridgeConfig, setBridgeConfig, DEFAULT_HOST, DEFAULT_PORT } from "..
 
 const hostInput = document.getElementById("host") as HTMLInputElement;
 const portInput = document.getElementById("port") as HTMLInputElement;
+const tokenInput = document.getElementById("token") as HTMLInputElement;
 const saveBtn = document.getElementById("save") as HTMLButtonElement;
 const statusEl = document.getElementById("status") as HTMLDivElement;
 
@@ -23,16 +24,18 @@ function refreshStatus() {
 }
 
 async function load() {
-  const { host, port } = await getBridgeConfig();
+  const { host, port, token } = await getBridgeConfig();
   hostInput.value = host;
   portInput.value = String(port);
+  tokenInput.value = token;
   refreshStatus();
 }
 
 saveBtn.addEventListener("click", async () => {
   const host = hostInput.value.trim() || DEFAULT_HOST;
   const port = parseInt(portInput.value, 10) || DEFAULT_PORT;
-  await setBridgeConfig({ host, port });
+  const token = tokenInput.value.trim();
+  await setBridgeConfig({ host, port, token });
   statusEl.textContent = "已保存，重连中…";
   statusEl.className = "status";
   setTimeout(refreshStatus, 600);

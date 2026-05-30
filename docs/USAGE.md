@@ -110,6 +110,37 @@ Claude 大致会这么做：
 
 ---
 
+## 跨机使用（Bridge 和浏览器不在同一台机器）
+
+典型场景：Bridge 跑在远端开发机 / 服务器（比如 VAW 的 Bridge 机器）上，而你装扩展的 Chrome 在自己的笔记本上。默认 Bridge 只监听 `127.0.0.1`，扩展连不上，需要两步打开跨机：
+
+> ⚠️ 安全提示：一旦监听 `0.0.0.0`，这条「控制浏览器」的通道就暴露在网络上了。**必须同时设置 `BRIDGELENS_TOKEN`**，否则同网段任何人都能操控你的浏览器。Bridge 在没设 token 却监听非回环地址时会打印 WARNING。
+
+1. **Bridge 侧**：在 MCP 配置（VAW 里就是「自定义 MCP Server」的 `env` 字段）加两个环境变量：
+   ```json
+   {
+     "mcpServers": {
+       "bridgelens": {
+         "command": "node",
+         "args": ["/home/xinyu/space/AgentBridgeLens/packages/bridge/dist/index.js"],
+         "env": {
+           "BRIDGELENS_HOST": "0.0.0.0",
+           "BRIDGELENS_TOKEN": "随便一串够长的随机密钥"
+         }
+       }
+     }
+   }
+   ```
+2. **扩展侧**：点工具栏的 AgentBridgeLens 图标：
+   - **Host** 填 Bridge 机器在你这边能访问到的 IP（如 `10.0.0.246`）
+   - **Port** 与 Bridge 一致（默认 `19222`）
+   - **Token** 填和 `BRIDGELENS_TOKEN` 完全相同的值
+   - 点「保存并重连」，顶部显示「已连接」即通。
+
+token 不匹配时 Bridge 会拒绝连接（关闭码 1008），扩展弹窗会一直停在「未连接」。
+
+---
+
 ## 出问题时怎么排查
 
 | 现象 | 原因 / 解决 |

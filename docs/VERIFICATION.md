@@ -96,7 +96,7 @@
 | 目标关闭/取消回退 | clear_target_tab → 回到跟随激活 | ✅ |
 | 新标签策略 follow | 目标页 Ctrl+点击开新标签 → 目标自动转移到新标签 | ✅（target 自动从文章页移到 dev.to/hadil） |
 | popup 标签页列表 UI | 弹窗列出 tab、🎯 目标标识、策略下拉 | ✅（用户确认：目标显示/列表/高亮/「目标」标记/策略切换均正常） |
-| reload 提示条 | 扩展更新/加载后旧页顶部出现「刷新以恢复连接」提示条 | ⬜ 下次 reload 时确认 |
+| reload 提示条 | 扩展更新/加载后旧页顶部出现「刷新以恢复连接」提示条 | ✅（reload 后普通网页顶部出现蓝色提示条） |
 
 > 已知限制复现：reload 扩展后，**reload 之前就打开的旧标签页** content script 会失效，content-script 类工具（get_page_info 等）超时，需刷新该 tab 一次；CDP 类工具（截图/抓包/trace/execute_js 回退）不受影响。本次验证已观察到并确认。
 

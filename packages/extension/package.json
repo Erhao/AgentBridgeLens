@@ -6,6 +6,7 @@
     "dev": "vite build --watch --mode development",
     "build": "vite build",
     "icons": "node scripts/gen-icons.mjs",
+    "zip": "vite build && node scripts/zip-dist.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

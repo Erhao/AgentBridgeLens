@@ -141,6 +141,26 @@ token 不匹配时 Bridge 会拒绝连接（关闭码 1008），扩展弹窗会�
 
 ---
 
+## 把扩展装到其他机器（不上架 Web Store）
+
+在本机一键打包：
+
+```bash
+pnpm zip   # 在仓库根目录；会先 build 再把 dist/ 打成 agentbridgelens-extension.zip
+```
+
+把生成的 `agentbridgelens-extension.zip` 拷到目标机（U 盘 / scp / 网盘均可），对方：
+
+1. 解压 zip 到一个目录
+2. `chrome://extensions/` → 开发者模式 → **加载已解压** → 选解压出的目录（里面有 `manifest.json`）
+
+> - zip 是自包含的，目标机**不需要** node / 源码 / 构建。
+> - 开发者模式扩展每次启动会弹一次「停用开发者模式扩展程序」提示，忽略即可。
+> - 每台机器要在扩展弹窗里**各自填 Host/Port/Token**（配置存本机，不随 zip 走）。
+> - `.crx` 自安装在普通 Chrome 已被禁用；要免开发者模式提示 + 自动更新需走企业策略下发。
+
+---
+
 ## 出问题时怎么排查
 
 | 现象 | 原因 / 解决 |

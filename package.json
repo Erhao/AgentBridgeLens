@@ -5,6 +5,7 @@
     "build": "pnpm -r build",
     "dev:bridge": "pnpm --filter @anthropic/agentbridgelens-bridge dev",
     "dev:extension": "pnpm --filter @anthropic/agentbridgelens-extension dev",
+    "zip": "pnpm --filter @anthropic/agentbridgelens-extension zip",
     "typecheck": "pnpm -r typecheck"
   }
 }

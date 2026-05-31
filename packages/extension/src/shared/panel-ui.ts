@@ -16,11 +16,13 @@ const STYLE = `
   .bl input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 3px; border: 1px solid #cbd2d9; border-radius: 5px; font-size: 13px; }
   #bl-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
   #bl-save:hover { background: #3a7bc0; }
-  .bl hr { border: none; border-top: 1px solid #eef1f4; margin: 14px 0 10px; }
+  .bl details { margin-bottom: 6px; }
+  .bl summary { cursor: pointer; font-size: 12px; color: #4a90d9; user-select: none; }
+  .bl hr { border: none; border-top: 1px solid #eef1f4; margin: 10px 0; }
   .bl-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #7b8794; margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between; }
   #bl-clear-all { text-transform: none; letter-spacing: 0; background: none; border: none; color: #4a90d9; cursor: pointer; font-size: 11px; padding: 0; }
   .bl-target { font-size: 12px; background: #eef4fb; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; word-break: break-all; }
-  #bl-tablist { max-height: 360px; overflow: auto; border: 1px solid #eef1f4; border-radius: 6px; }
+  #bl-tablist { max-height: 440px; overflow: auto; border: 1px solid #eef1f4; border-radius: 6px; }
   .bl-tab { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-bottom: 1px solid #f3f5f7; font-size: 12px; }
   .bl-tab:last-child { border-bottom: none; }
   .bl-tab.is-target { background: #e3f9e5; }
@@ -36,11 +38,14 @@ const STYLE = `
 const MARKUP = `
   <h1 class="bl-h1">AgentBridgeLens</h1>
   <div id="bl-status" class="status">检查连接中…</div>
-  <label>Host <input id="bl-host" type="text" placeholder="127.0.0.1" /></label>
-  <label>Port <input id="bl-port" type="number" min="1" max="65535" placeholder="19222" /></label>
-  <label>Token <span style="color:#7b8794">（跨机时必填）</span>
-    <input id="bl-token" type="password" placeholder="BRIDGELENS_TOKEN" autocomplete="off" /></label>
-  <button id="bl-save">保存并重连</button>
+  <details id="bl-conn">
+    <summary>连接设置（Host / Port / Token）</summary>
+    <label>Host <input id="bl-host" type="text" placeholder="127.0.0.1" /></label>
+    <label>Port <input id="bl-port" type="number" min="1" max="65535" placeholder="19222" /></label>
+    <label>Token <span style="color:#7b8794">（跨机时必填）</span>
+      <input id="bl-token" type="password" placeholder="BRIDGELENS_TOKEN" autocomplete="off" /></label>
+    <button id="bl-save">保存并重连</button>
+  </details>
   <hr />
   <h2 class="bl-h2">目标标签页 <button id="bl-clear-all">全部取消</button></h2>
   <div id="bl-target" class="bl-target">跟随当前激活标签页</div>

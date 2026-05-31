@@ -1,50 +1,21 @@
 import { describe } from "./selector";
+import { trackBox, clearTracked, overlayLayer } from "./overlay-tracker";
 
-const LAYER_ID = "bridgelens-overlay-layer";
-
-function ensureLayer(): HTMLElement {
-  let layer = document.getElementById(LAYER_ID);
-  if (!layer) {
-    layer = document.createElement("div");
-    layer.id = LAYER_ID;
-    layer.style.cssText =
-      "position:fixed;inset:0;pointer-events:none;z-index:2147483646;";
-    document.documentElement.appendChild(layer);
-  }
-  return layer;
-}
-
-function box(rect: DOMRect, color: string, label?: string, dashed = false) {
-  const layer = ensureLayer();
-  const b = document.createElement("div");
-  b.style.cssText =
-    `position:absolute;left:${rect.left}px;top:${rect.top}px;` +
-    `width:${rect.width}px;height:${rect.height}px;` +
-    `border:2px ${dashed ? "dashed" : "solid"} ${color};box-sizing:border-box;`;
-  if (label) {
-    const l = document.createElement("div");
-    l.textContent = label;
-    l.style.cssText =
-      `position:absolute;left:0;top:-18px;background:${color};color:#fff;` +
-      `font:11px/1.4 monospace;padding:0 4px;white-space:nowrap;`;
-    b.appendChild(l);
-  }
-  layer.appendChild(b);
-}
+const RESP_FRAME_ID = "bridgelens-responsive-frame";
 
 export function clearOverlays() {
-  document.getElementById(LAYER_ID)?.remove();
+  clearTracked("overlay");
+  document.getElementById(RESP_FRAME_ID)?.remove();
   return { ok: true };
 }
 
-/** 标注一组元素（差异标注：agent 把改动过的 selector 传进来，用红框圈出）。 */
+/** 标注一组元素（差异标注：红框圈出 agent 改动过的元素），实时跟随滚动。 */
 export function markElements(selectors: string[], color = "#ff3b30", label?: string) {
-  ensureLayer();
   let marked = 0;
   for (const sel of selectors) {
     try {
       document.querySelectorAll(sel).forEach((el) => {
-        box(el.getBoundingClientRect(), color, label, false);
+        trackBox(el, { color, label }, "overlay");
         marked++;
       });
     } catch {
@@ -54,9 +25,8 @@ export function markElements(selectors: string[], color = "#ff3b30", label?: str
   return { marked };
 }
 
-/** 布局可视化：圈出内容被 overflow 截断的元素。 */
+/** 布局可视化：圈出内容被 overflow 截断的元素（橙色虚线，实时跟随）。 */
 export function visualizeLayout() {
-  ensureLayer();
   const clipped: string[] = [];
   document.querySelectorAll<HTMLElement>("body *").forEach((el) => {
     const style = getComputedStyle(el);
@@ -68,7 +38,7 @@ export function visualizeLayout() {
     if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
       const rect = el.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        box(rect, "#ff9500", "clipped", true);
+        trackBox(el, { color: "#ff9500", label: "clipped", dashed: true }, "overlay");
         clipped.push(describe(el));
       }
     }
@@ -76,18 +46,23 @@ export function visualizeLayout() {
   return { clippedCount: clipped.length, clipped: clipped.slice(0, 50) };
 }
 
-/** 响应式参考框：在当前页叠加一个目标视口宽度的框，并列出比它更宽（可能溢出）的元素。 */
+/**
+ * 响应式参考框：在当前页叠加一个目标视口宽度的框，并列出比它更宽（可能溢出）的元素。
+ * 这个框是"视口参考线"，本就该固定在视口、不随滚动移动（与跟踪框不同）。
+ */
 export function showResponsiveFrame(width = 375) {
-  const layer = ensureLayer();
+  document.getElementById(RESP_FRAME_ID)?.remove();
+  const layer = overlayLayer();
   const frameLeft = Math.max(0, (window.innerWidth - width) / 2);
   const frame = document.createElement("div");
+  frame.id = RESP_FRAME_ID;
   frame.style.cssText =
-    `position:absolute;left:${frameLeft}px;top:0;width:${width}px;height:${window.innerHeight}px;` +
-    `border:2px solid #007aff;box-sizing:border-box;background:rgba(0,122,255,.04);`;
+    `position:fixed;left:${frameLeft}px;top:0;width:${width}px;height:100vh;` +
+    `border:2px solid #007aff;box-sizing:border-box;background:rgba(0,122,255,.04);pointer-events:none;`;
   const tag = document.createElement("div");
   tag.textContent = `${width}px`;
   tag.style.cssText =
-    "position:absolute;left:0;top:-18px;background:#007aff;color:#fff;font:11px/1.4 monospace;padding:0 4px;";
+    "position:absolute;left:0;top:0;background:#007aff;color:#fff;font:11px/1.4 monospace;padding:0 4px;";
   frame.appendChild(tag);
   layer.appendChild(frame);
 
@@ -100,6 +75,6 @@ export function showResponsiveFrame(width = 375) {
     frameWidth: width,
     widerThanFrameCount: wide.length,
     examples: wide.slice(0, 30),
-    note: "蓝框为目标视口宽度；examples 列出比它更宽、可能在小屏溢出的元素。",
+    note: "蓝框为目标视口宽度参考（固定在视口）；examples 列出比它更宽、可能在小屏溢出的元素。",
   };
 }

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WsRelay } from "./ws-relay.js";
 import { createMcpServer } from "./mcp-server.js";

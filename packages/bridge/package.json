@@ -1,14 +1,40 @@
 {
-  "name": "@anthropic/agentbridgelens-bridge",
+  "name": "agentbridgelens",
   "version": "0.1.0",
+  "description": "MCP server bridging AI coding agents to a real Chrome browser via the AgentBridgeLens extension — DOM inspection, screenshots, network/console capture, source-map tracing, visual overlays, multi-tab targeting.",
   "type": "module",
   "bin": {
     "agentbridgelens": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "ai-agent",
+    "chrome-extension",
+    "browser",
+    "cdp",
+    "debugging",
+    "source-map"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Erhao/AgentBridgeLens.git",
+    "directory": "packages/bridge"
+  },
+  "homepage": "https://github.com/Erhao/AgentBridgeLens#readme",
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
     "dev": "tsup src/index.ts --format esm --watch --onSuccess 'node dist/index.js'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsup src/index.ts --format esm --dts"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.25",

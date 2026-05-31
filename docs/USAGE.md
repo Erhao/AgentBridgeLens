@@ -37,20 +37,22 @@ pnpm build
 
 ### 3. 把 Bridge 告诉 Claude Code
 
-在 Claude Code 的 MCP 配置里加上（路径换成你自己的绝对路径）：
+**推荐：配一次，全项目可用（`npx` + 用户作用域）。** Bridge 已发布到 npm，无需 clone / build：
 
-```json
-{
-  "mcpServers": {
-    "bridgelens": {
-      "command": "node",
-      "args": ["/home/xinyu/space/AgentBridgeLens/packages/bridge/dist/index.js"]
-    }
-  }
-}
+```bash
+claude mcp add -s user bridgelens -- npx -y agentbridgelens
 ```
 
-保存后重启 Claude Code。你**不用**自己去启动 Bridge——Claude Code 会自动把它拉起来。
+`-s user` 是用户作用域——**所有项目/会话都自动有这些工具**，不用每个项目单独配。等价的手动配置：
+
+```json
+{ "mcpServers": { "bridgelens": { "command": "npx", "args": ["-y", "agentbridgelens"] } } }
+```
+
+> 本地开发（指向源码构建产物）的替代写法：
+> `"command": "node", "args": ["/绝对路径/AgentBridgeLens/packages/bridge/dist/index.js"]`
+
+保存后重启 Claude Code。你**不用**自己启动 Bridge——Claude Code 会自动拉起。跨机时在 `env` 里加 `BRIDGELENS_HOST` / `BRIDGELENS_TOKEN`（见下文「跨机使用」）。
 
 ---
 

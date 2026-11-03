@@ -1,5 +1,5 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
-import { getPageInfo, getDomSnapshot, inspectElement, executeJs, getElementRect } from "./dom-inspector";
+import { getPageInfo, getDomSnapshot, inspectElement, getElementRect } from "./dom-inspector";
 import { highlightElement, clearHighlights } from "./highlighter";
 import { startCapture as startConsoleCapture, getConsoleLogs, getErrors } from "./console-capture";
 import { startCapture as startNetworkCapture, getNetworkRequests } from "./network-capture";
@@ -18,7 +18,6 @@ const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
   get_dom_snapshot: (p) => getDomSnapshot(p.selector as string | undefined, p.maxDepth as number | undefined),
   inspect_element: (p) => inspectElement(p.selector as string),
   get_element_rect: (p) => getElementRect(p.selector as string),
-  execute_js: (p) => executeJs(p.code as string),
   highlight_element: (p) =>
     highlightElement(p.selector as string, p.color as string | undefined, p.label as string | undefined),
   clear_highlights: () => clearHighlights(),

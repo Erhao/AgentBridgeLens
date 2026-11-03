@@ -116,19 +116,3 @@ export function getElementRect(selector: string) {
     dpr,
   };
 }
-
-export function executeJs(code: string): unknown {
-  try {
-    const fn = new Function(`return (${code})`);
-    const result = fn();
-    return { value: typeof result === "object" ? JSON.parse(JSON.stringify(result)) : result };
-  } catch {
-    try {
-      const fn = new Function(code);
-      fn();
-      return { value: undefined };
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) };
-    }
-  }
-}

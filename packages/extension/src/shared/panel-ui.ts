@@ -16,6 +16,10 @@ const STYLE = `
   .bl input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 3px; border: 1px solid #cbd2d9; border-radius: 5px; font-size: 13px; }
   #bl-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
   #bl-save:hover { background: #3a7bc0; }
+  .bl .bl-privacy { font-size: 12px; line-height: 1.5; background: #eef4fb; padding: 8px; border-radius: 6px; margin-bottom: 10px; }
+  .bl .bl-consent { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; }
+  .bl .bl-consent input { width: auto; margin-top: 3px; }
+  .bl .bl-privacy a { color: #2d6fd6; }
   .bl details { margin-bottom: 6px; }
   .bl summary { cursor: pointer; font-size: 12px; color: #4a90d9; user-select: none; }
   .bl hr { border: none; border-top: 1px solid #eef1f4; margin: 10px 0; }
@@ -38,6 +42,12 @@ const STYLE = `
 const MARKUP = `
   <h1 class="bl-h1">AgentBridgeLens</h1>
   <div id="bl-status" class="status">检查连接中…</div>
+  <div class="bl-privacy">
+    连接后，AI 可通过你配置的 Bridge 读取标签页信息、网页内容、截图、调试日志，并执行网页操作；启动录制后还可记录输入内容。数据会发送到 Bridge 及其连接的 AI 客户端，可能离开本机。请仅连接可信服务，并避免在敏感页面使用。
+    <a href="/privacy.html" target="_blank" rel="noopener">隐私政策 / Privacy policy</a>
+    <label class="bl-consent"><input id="bl-consent" type="checkbox" />我同意上述数据访问和传输，并启用 Bridge 连接</label>
+    <button id="bl-apply-consent" type="button">应用授权设置</button>
+  </div>
   <details id="bl-conn">
     <summary>连接设置（Host / Port / Token）</summary>
     <label>Host <input id="bl-host" type="text" placeholder="127.0.0.1" /></label>
@@ -91,8 +101,16 @@ export function mountControls(root: HTMLElement): void {
   const targetEl = root.querySelector<HTMLDivElement>("#bl-target")!;
   const tablistEl = root.querySelector<HTMLDivElement>("#bl-tablist")!;
   const clearAllBtn = root.querySelector<HTMLButtonElement>("#bl-clear-all")!;
+  const consentInput = root.querySelector<HTMLInputElement>("#bl-consent")!;
+  const applyConsentBtn = root.querySelector<HTMLButtonElement>("#bl-apply-consent")!;
 
-  function refreshStatus() {
+  async function refreshStatus() {
+    const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
+    if (bridgeConsent !== true) {
+      statusEl.textContent = "连接已暂停：请阅读数据说明，勾选并应用授权后再连接。";
+      statusEl.className = "status";
+      return;
+    }
     chrome.runtime.sendMessage({ type: "bridgelens-get-status" }, (res) => {
       if (chrome.runtime.lastError || !res) {
         statusEl.textContent = "状态未知";
@@ -111,7 +129,14 @@ export function mountControls(root: HTMLElement): void {
     hostInput.value = host;
     portInput.value = String(port);
     tokenInput.value = token;
+    const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
+    consentInput.checked = bridgeConsent === true;
   }
+
+  applyConsentBtn.addEventListener("click", async () => {
+    await chrome.storage.local.set({ bridgeConsent: consentInput.checked });
+    await refreshStatus();
+  });
 
   saveBtn.addEventListener("click", async () => {
     const host = hostInput.value.trim() || DEFAULT_HOST;

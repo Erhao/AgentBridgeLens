@@ -34,6 +34,8 @@ async function connect() {
   }
 
   const { host, port, token } = await getBridgeConfig();
+  const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
+  if (bridgeConsent !== true) return;
   // Display URL omits the token; the actual dial URL carries it as a query param.
   currentUrl = `ws://${host}:${port}`;
   const dialUrl = token ? `${currentUrl}?token=${encodeURIComponent(token)}` : currentUrl;
@@ -215,17 +217,10 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
     case "capture_screenshot":
       return screenshot(tabId, params.selector as string | undefined);
 
-    case "execute_js": {
-      // 先走 content script（快、无横幅）；若被页面 CSP 拦截，回退到 CDP（绕过 CSP）。
-      const res = (await sendToContentScript(tabId, "execute_js", params)) as {
-        value?: unknown;
-        error?: string;
-      };
-      if (res?.error && /content security policy|unsafe-eval|\beval\b/i.test(res.error)) {
-        return cdpEvaluate(tabId, params.code as string);
-      }
-      return res;
-    }
+    // MV3 permits externally supplied debugging expressions through the Debugger
+    // API. Never evaluate bridge-supplied strings inside extension content scripts.
+    case "execute_js":
+      return cdpEvaluate(tabId, params.code as string);
 
     case "trace_element_to_source":
       return runInMainWorld(tabId, traceElementToSource, [params.selector]);
@@ -261,7 +256,7 @@ function forceReconnect() {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.bridgeHost || changes.bridgePort || changes.bridgeToken)) {
+  if (area === "local" && (changes.bridgeHost || changes.bridgePort || changes.bridgeToken || changes.bridgeConsent)) {
     forceReconnect();
   }
 });

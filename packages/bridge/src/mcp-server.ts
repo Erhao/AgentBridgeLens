@@ -52,7 +52,7 @@ export function createMcpServer(relay: WsRelay): McpServer {
     }
   );
 
-  page("execute_js", "Execute a JavaScript expression in the page context and return the result (falls back to CDP on strict-CSP pages)", {
+  page("execute_js", "Execute a JavaScript expression in the page context through the Chrome Debugger API (may show a debugging banner)", {
     code: z.string().describe("JavaScript code to execute in the page context"),
   });
   page("get_dom_snapshot", "Get a simplified DOM snapshot of the page or a specific subtree", {

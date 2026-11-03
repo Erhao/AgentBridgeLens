@@ -5,3 +5,4 @@ dist/
 .codegraph/
 .vaw/
 agentbridgelens-extension.zip
+/release/

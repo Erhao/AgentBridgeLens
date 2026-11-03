@@ -16,6 +16,9 @@ AI Agent ←─ MCP (stdio / Streamable HTTP) ─→ Bridge Server ←─WebSock
 
 ## Quick Start
 
+预编译扩展安装包可从 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 下载。
+`main` 的版本由 semantic-release 计算并通过 GitHub Actions 自动发布，见 [发布流程](docs/RELEASING.md)。
+
 ### 1. Install dependencies
 
 ```bash

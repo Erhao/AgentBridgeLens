@@ -1,6 +1,6 @@
 {
   "name": "agentbridgelens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server bridging AI coding agents to a real Chrome browser via the AgentBridgeLens extension — DOM inspection, screenshots, network/console capture, source-map tracing, visual overlays, multi-tab targeting.",
   "type": "module",
   "bin": {
@@ -34,11 +34,12 @@
     "build": "tsup src/index.ts --format esm --dts",
     "dev": "tsup src/index.ts --format esm --watch --onSuccess 'node dist/index.js'",
     "typecheck": "tsc --noEmit",
+    "test": "pnpm build && node --test test/*.test.mjs",
     "prepublishOnly": "tsup src/index.ts --format esm --dts"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.25",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "ws": "^8.18.0",
     "zod": "^3.25.0"
   },

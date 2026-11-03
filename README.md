@@ -5,7 +5,7 @@ A Chrome extension that bridges AI coding agents with real browser environments 
 ## Architecture
 
 ```
-AI Agent (Claude Code) ←─stdio/MCP─→ Bridge Server ←─WebSocket─→ Chrome Extension
+AI Agent ←─ MCP (stdio / Streamable HTTP) ─→ Bridge Server ←─WebSocket─→ Chrome Extension
 ```
 
 - **Bridge Server**: Thin MCP relay (~200 lines) — translates MCP tool calls to WebSocket messages
@@ -57,6 +57,23 @@ Open any webpage in Chrome, then in Claude Code:
 ```
 Use bridgelens to capture a screenshot of the current page
 ```
+
+### Remote MCP via Streamable HTTP
+
+To let an AI client connect by URL, start a standalone bridge:
+
+```bash
+BRIDGELENS_TRANSPORT=http \
+BRIDGELENS_HTTP_HOST=0.0.0.0 \
+BRIDGELENS_HTTP_TOKEN='replace-with-a-long-random-secret' \
+node packages/bridge/dist/index.js
+```
+
+Connect the MCP client to `http://<bridge-IP>:19223/mcp` with an
+`Authorization: Bearer <your-secret>` header. The Chrome extension still uses
+WebSocket port `19222`. To connect Chrome from another machine, also configure
+`BRIDGELENS_HOST` / `BRIDGELENS_TOKEN` and the extension's matching Host/Port/Token.
+See [transport configuration and limitations](packages/bridge/README.md#streamable-http-remote-mcp-clients).
 
 ## Available MCP Tools
 

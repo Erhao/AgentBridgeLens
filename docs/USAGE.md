@@ -58,6 +58,13 @@ claude mcp add -s user bridgelens -- npx -y agentbridgelens
 
 ## 每次使用的流程
 
+> **通过 URL 连接 MCP**：目前也支持 Streamable HTTP，无需让 AI 客户端启动本地桥接子进程。
+> 设置 `BRIDGELENS_TRANSPORT=http` 后独立启动桥接服务，MCP 地址默认为
+> `http://127.0.0.1:19223/mcp`；跨主机设置 `BRIDGELENS_HTTP_HOST=0.0.0.0`
+> 和 `BRIDGELENS_HTTP_TOKEN`，客户端发送 `Authorization: Bearer <密钥>`。
+> Chrome 扩展仍连接 WebSocket `19222`，两个端口用途不同。
+> 完整配置与限制见 [Bridge 使用说明](../packages/bridge/README.md#streamable-http-remote-mcp-clients)。
+
 1. **打开你要调试的网页**（在装了扩展的那个 Chrome 里），让它停在前台标签页。
 2. **打开 Claude Code**，正常对话即可。
 3. **确认连上了**：点浏览器工具栏的 AgentBridgeLens 图标，弹窗顶部显示「已连接」就说明通了。

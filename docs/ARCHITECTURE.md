@@ -35,7 +35,14 @@ Bridge Server 本身**不含任何浏览器能力**，它只是一个薄中继�
 
 ## 2. 组件之间怎么通信
 
-### 2.1 Agent ↔ Bridge Server：stdio + MCP（JSON-RPC）
+### 2.1 Agent ↔ Bridge Server：stdio 或 Streamable HTTP + MCP（JSON-RPC）
+
+默认使用下述 stdio 模式。新增 `BRIDGELENS_TRANSPORT=http` 可独立启动
+Streamable HTTP 服务（`src/http-server.ts`），默认端点 `127.0.0.1:19223/mcp`。
+每个 POST 使用独立的 MCP server/transport，通过 SDK 返回 SSE；无 MCP 会话，
+GET/DELETE 返回 405。所有请求共用浏览器 relay。支持 Bearer token、Origin 白名单
+和 CORS 预检，HTTP 监听非回环地址时必须设置 token。
+完整变量与局域网配置见 [Bridge README](../packages/bridge/README.md#streamable-http-remote-mcp-clients)。
 
 Claude Code 按 MCP 配置把 Bridge Server 当作**子进程**启动，通过该进程的 stdin/stdout 收发 JSON-RPC 消息。
 

@@ -1,6 +1,6 @@
 # AgentBridgeLens Privacy Policy
 
-Effective date: 3 November 2026. This policy covers the AgentBridgeLens Chrome extension and its companion Bridge. Support and privacy requests: [project issue tracker](https://github.com/Erhao/AgentBridgeLens/issues). Do not include private browsing data or credentials in a public issue.
+Effective date: 3 November 2026. This policy covers the AgentBridgeLens Chrome extension and its companion Bridge. Support and privacy requests: [project issue tracker](https://github.com/Erhao/AgentBridgeLens/issues) or [zhangxinyu9702@gmail.com](mailto:zhangxinyu9702@gmail.com). Do not include private browsing data or credentials in a public issue.
 
 
 ## Purpose and consent

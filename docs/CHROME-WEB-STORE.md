@@ -1,6 +1,6 @@
 # AgentBridgeLens Chrome Web Store 上架资料
 
-此资料对应 Chrome Web Store 1.0.1 候选包，源码引用为 `chrome-store-candidate-1.0.1`。提交前需确认公开支持信息，并在 Chrome 开发者后台核对隐私勾选项。源码保留开发版本 0.1.0；候选 ZIP 的构建产物 manifest 使用 1.0.1，高于现有 GitHub 版本 1.0.0。
+此资料对应 Chrome Web Store 1.0.1 候选包，源码引用为 `chrome-store-candidate-1.0.1-r2`。提交前需确认公开支持信息，并在 Chrome 开发者后台核对隐私勾选项。源码保留开发版本 0.1.0；候选 ZIP 的构建产物 manifest 使用 1.0.1，高于现有 GitHub 版本 1.0.0。
 
 ## 商店条目
 
@@ -9,11 +9,12 @@
 - 语言：English；界面主要使用简体中文，详情应明确这一点。
 - 网站：https://github.com/Erhao/AgentBridgeLens
 - 支持：https://github.com/Erhao/AgentBridgeLens/issues
+- 公开支持邮箱：zhangxinyu9702@gmail.com（已获用户确认）
 - 收费：免费；用户配置的 AI 服务可能另行收费。
 - 简介：Connect your AI coding client to Chrome for webpage inspection, screenshots, and debugging through your own Bridge.
 - 图标：`packages/extension/public/icons/icon128.png`
 - 隐私政策源文件：`packages/extension/public/privacy.html`；随包可通过扩展的 Privacy policy 链接访问；相同内容的仓库文档为 `docs/PRIVACY.md`。
-- 公开隐私政策 URL：https://github.com/Erhao/AgentBridgeLens/blob/chrome-store-candidate-1.0.1/docs/PRIVACY.md （该 tag 发布后需验证无登录可读）。
+- 公开隐私政策 URL：https://github.com/Erhao/AgentBridgeLens/blob/chrome-store-candidate-1.0.1-r2/docs/PRIVACY.md （该 tag 发布后需验证无登录可读）。
 - 商店截图：`release/chrome-store/screenshot-debugging.png`，1280×800，由真实扩展在独立测试浏览器中对仓库示例页面截图；不是用户个人浏览器的截图。
 
 ### English detailed description
@@ -68,10 +69,10 @@ The connected user-configured Bridge may provide JavaScript debugging expression
 
 ## 审核员操作步骤
 
-对应源码版本为 `chrome-store-candidate-1.0.1`，应在提交前验证该 tag 可公开访问。
+对应源码版本为 `chrome-store-candidate-1.0.1-r2`，应在提交前验证该 tag 可公开访问。
 
 1. Install the submitted extension. The companion Bridge runs on the same computer and needs Node.js 24 and pnpm 10.33.3 for the source-build path below. No paid AI account or account on a developer-operated service is required for this inspection path.
-2. Clone https://github.com/Erhao/AgentBridgeLens and run `git checkout chrome-store-candidate-1.0.1`. Run `pnpm install --frozen-lockfile` and `pnpm --filter agentbridgelens build`.
+2. Clone https://github.com/Erhao/AgentBridgeLens and run `git checkout chrome-store-candidate-1.0.1-r2`. Run `pnpm install --frozen-lockfile` and `pnpm --filter agentbridgelens build`.
 3. In a terminal at the repository root, run `BRIDGELENS_TRANSPORT=http node packages/bridge/dist/index.js`. The MCP endpoint is http://127.0.0.1:19223/mcp and the extension WebSocket endpoint is 127.0.0.1:19222. The Bridge binds to loopback by default.
 4. Open the extension popup, read the disclosure, check the consent checkbox and click 应用授权设置 (Apply authorization). Confirm 已连接 (Connected). If needed, open 连接设置, leave Host=127.0.0.1, Port=19222, Token empty for this local-only setup, and click 保存并重连.
 5. Open https://example.com in a fresh tab after extension installation. Pin it using 设为目标 (Set target) in the popup.
@@ -81,7 +82,7 @@ The connected user-configured Bridge may provide JavaScript debugging expression
 9. Call `start_cdp_network`, reload the test page, and call `get_cdp_network` followed by `stop_cdp_network`. This should return request metadata and then detach debugging.
 10. Uncheck and apply consent in the popup; the connection should close and remain closed. Do not perform input recording on login, payment, or other sensitive pages.
 
-No login credentials are required by the extension or the local Bridge. The project issue tracker is the support channel.
+No login credentials are required by the extension or the local Bridge. Support: https://github.com/Erhao/AgentBridgeLens/issues or zhangxinyu9702@gmail.com.
 
 ## 提交前检查
 

@@ -9,7 +9,7 @@ type Policy = "stay" | "follow";
 
 const STYLE = `
   .bl-h1 { font-size: 14px; margin: 0 0 10px; }
-  .status { font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 12px; background: #f0f2f5; }
+  .status { font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 12px; background: #f0f2f5; white-space: pre-line; overflow-wrap: anywhere; }
   .status.ok { background: #e3f9e5; color: #207227; }
   .status.bad { background: #fff0f0; color: #ab1c1c; }
   .bl label { display: block; font-size: 12px; margin-bottom: 8px; }
@@ -99,7 +99,9 @@ export function mountControls(root: HTMLElement): void {
         statusEl.className = "status";
         return;
       }
-      statusEl.textContent = res.connected ? `已连接 ${res.url}` : "未连接（确认 Bridge Server 已启动）";
+      statusEl.textContent = res.connected
+        ? `已连接 ${res.url}`
+        : `未连接到桥接服务${res.url ? `：${res.url}` : ""}\n请检查：运行 AI 的电脑上是否已启动 AgentBridgeLens 桥接服务；下方 Host / Port 是否指向该服务，Token 是否一致。跨电脑连接还需确认网络可达。`;
       statusEl.className = res.connected ? "status ok" : "status bad";
     });
   }

@@ -1,10 +1,10 @@
 import type {
   BridgeRequest,
-  BridgeResponse,
   ContentRequest,
   ContentResponse,
 } from "../shared/protocol";
-import { getBridgeConfig } from "../shared/config";
+import { getBridgeProfiles } from "../shared/config";
+import { BridgeConnections, type BridgeSource } from "./bridge-connections";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 import {
   startCdpNetwork,
@@ -22,66 +22,14 @@ import {
   registerTabListeners,
 } from "./tabs";
 
-const RECONNECT_INTERVAL = 3000;
-
-let ws: WebSocket | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let currentUrl = "";
-
+const connections = new BridgeConnections(handleToolCall);
+let configRevision = 0;
 async function connect() {
-  if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
-    return;
-  }
-
-  const { host, port, token } = await getBridgeConfig();
-  // Display URL omits the token; the actual dial URL carries it as a query param.
-  currentUrl = `ws://${host}:${port}`;
-  const dialUrl = token ? `${currentUrl}?token=${encodeURIComponent(token)}` : currentUrl;
-  ws = new WebSocket(dialUrl);
-
-  ws.onopen = () => {
-    console.log(`[BridgeLens] Connected to bridge server at ${currentUrl}`);
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  };
-
-  ws.onmessage = async (event) => {
-    const parsed = JSON.parse(event.data as string) as BridgeRequest | { t?: string };
-    // 心跳 ping：仅用于保活（收到即重置 SW 空闲计时器），无需回应。
-    if ((parsed as { t?: string }).t === "ping") return;
-    const request = parsed as BridgeRequest;
-    try {
-      const result = await handleToolCall(request);
-      const response: BridgeResponse = { id: request.id, result };
-      ws?.send(JSON.stringify(response));
-    } catch (err) {
-      const response: BridgeResponse = {
-        id: request.id,
-        error: { message: err instanceof Error ? err.message : String(err) },
-      };
-      ws?.send(JSON.stringify(response));
-    }
-  };
-
-  ws.onclose = () => {
-    console.log("[BridgeLens] Disconnected from bridge server");
-    ws = null;
-    scheduleReconnect();
-  };
-
-  ws.onerror = () => {
-    ws?.close();
-  };
-}
-
-function scheduleReconnect() {
-  if (reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connect();
-  }, RECONNECT_INTERVAL);
+  const revision = ++configRevision;
+  const [profiles, { bridgeConsent }] = await Promise.all([
+    getBridgeProfiles(), chrome.storage.local.get("bridgeConsent"),
+  ]);
+  if (revision === configRevision) connections.update(profiles, bridgeConsent === true);
 }
 
 /** 截图：激活 tab 用 captureVisibleTab（快、无横幅）；后台 tab 用 CDP（可截后台）。 */
@@ -180,17 +128,29 @@ function broadcast(message: unknown): void {
 
 const pendingConfirms = new Map<string, (choice: string) => void>();
 
-function requestConfirmation(message: string, options: string[]): Promise<unknown> {
-  return new Promise((resolve) => {
+function requestConfirmation(message: string, options: string[], source: BridgeSource): Promise<unknown> {
+  return new Promise((resolve, reject) => {
     const cid = crypto.randomUUID();
-    pendingConfirms.set(cid, (choice) => resolve({ choice }));
-    broadcast({ type: "bridgelens-confirm", cid, message, options });
+    const finish = (choice?: string) => {
+      clearTimeout(timeout);
+      source.signal.removeEventListener("abort", abort);
+      pendingConfirms.delete(cid);
+      broadcast({ type: "bridgelens-confirm-dismiss", cid });
+      if (choice !== undefined) resolve({ choice });
+      else reject(new Error("Confirmation expired or bridge disconnected"));
+    };
+    const abort = () => finish();
+    const timeout = setTimeout(abort, 110_000);
+    source.signal.addEventListener("abort", abort, { once: true });
+    if (source.signal.aborted) { abort(); return; }
+    pendingConfirms.set(cid, finish);
+    broadcast({ type: "bridgelens-confirm", cid, message, options, bridgeName: source.name, bridgeUrl: source.url });
   });
 }
 
-async function handleToolCall(request: BridgeRequest): Promise<unknown> {
+async function handleToolCall(request: BridgeRequest, source: BridgeSource): Promise<unknown> {
   const { tool, params } = request;
-  broadcast({ type: "bridgelens-activity", tool, ts: Date.now() });
+  broadcast({ type: "bridgelens-activity", tool, ts: Date.now(), bridgeId: source.id, bridgeName: source.name, bridgeUrl: source.url });
 
   // —— 不针对具体页面的管理类工具 ——
   switch (tool) {
@@ -204,7 +164,7 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
       return clearTargetTab(params.tabId as number | undefined);
     case "request_user_confirmation": {
       const options = (params.options as string[] | undefined) || ["确认", "取消"];
-      return requestConfirmation(params.message as string, options);
+      return requestConfirmation(params.message as string, options, source);
     }
   }
 
@@ -215,17 +175,10 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
     case "capture_screenshot":
       return screenshot(tabId, params.selector as string | undefined);
 
-    case "execute_js": {
-      // 先走 content script（快、无横幅）；若被页面 CSP 拦截，回退到 CDP（绕过 CSP）。
-      const res = (await sendToContentScript(tabId, "execute_js", params)) as {
-        value?: unknown;
-        error?: string;
-      };
-      if (res?.error && /content security policy|unsafe-eval|\beval\b/i.test(res.error)) {
-        return cdpEvaluate(tabId, params.code as string);
-      }
-      return res;
-    }
+    // MV3 permits externally supplied debugging expressions through the Debugger
+    // API. Never evaluate bridge-supplied strings inside extension content scripts.
+    case "execute_js":
+      return cdpEvaluate(tabId, params.code as string);
 
     case "trace_element_to_source":
       return runInMainWorld(tabId, traceElementToSource, [params.selector]);
@@ -247,28 +200,16 @@ async function handleToolCall(request: BridgeRequest): Promise<unknown> {
   }
 }
 
-function forceReconnect() {
-  if (ws) {
-    ws.onclose = null;
-    ws.close();
-    ws = null;
-  }
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-  connect();
-}
-
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.bridgeHost || changes.bridgePort || changes.bridgeToken)) {
-    forceReconnect();
+  if (area === "local" && (changes.bridgeProfiles || changes.bridgeHost || changes.bridgePort || changes.bridgeToken || changes.bridgeConsent)) {
+    void connect();
   }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "bridgelens-get-status") {
-    sendResponse({ connected: ws?.readyState === WebSocket.OPEN, url: currentUrl });
+    const bridges = connections.status();
+    sendResponse({ connected: bridges.some((bridge) => bridge.connected), bridges });
   } else if (message?.type === "bridgelens-confirm-result") {
     const fn = pendingConfirms.get(message.cid);
     if (fn) {

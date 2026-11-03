@@ -1,13 +1,14 @@
 {
   "name": "@anthropic/agentbridgelens-extension",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
     "icons": "node scripts/gen-icons.mjs",
     "zip": "vite build && node scripts/zip-dist.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.32",

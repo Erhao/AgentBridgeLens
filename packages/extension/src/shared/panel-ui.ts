@@ -3,7 +3,7 @@
  * mountControls(root) 注入样式 + 构建 DOM + 接好全部逻辑。
  * 目标是一组（可固定多个）；每个固定目标行上单独设「新标签策略」。
  */
-import { getBridgeConfig, setBridgeConfig, DEFAULT_HOST, DEFAULT_PORT } from "./config";
+import { getBridgeProfiles, setBridgeProfiles, DEFAULT_HOST, DEFAULT_PORT, type BridgeProfile } from "./config";
 
 type Policy = "stay" | "follow";
 
@@ -13,9 +13,15 @@ const STYLE = `
   .status.ok { background: #e3f9e5; color: #207227; }
   .status.bad { background: #fff0f0; color: #ab1c1c; }
   .bl label { display: block; font-size: 12px; margin-bottom: 8px; }
+  .bl select { max-width: 100%; padding: 5px; margin: 4px 0; }
+  .bl .bl-service-actions { display: flex; gap: 8px; margin-bottom: 8px; }
   .bl input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 3px; border: 1px solid #cbd2d9; border-radius: 5px; font-size: 13px; }
   #bl-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
   #bl-save:hover { background: #3a7bc0; }
+  .bl .bl-privacy { font-size: 12px; line-height: 1.5; background: #eef4fb; padding: 8px; border-radius: 6px; margin-bottom: 10px; }
+  .bl .bl-consent { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; }
+  .bl .bl-consent input { width: auto; margin-top: 3px; }
+  .bl .bl-privacy a { color: #2d6fd6; }
   .bl details { margin-bottom: 6px; }
   .bl summary { cursor: pointer; font-size: 12px; color: #4a90d9; user-select: none; }
   .bl hr { border: none; border-top: 1px solid #eef1f4; margin: 10px 0; }
@@ -38,13 +44,23 @@ const STYLE = `
 const MARKUP = `
   <h1 class="bl-h1">AgentBridgeLens</h1>
   <div id="bl-status" class="status">检查连接中…</div>
+  <div class="bl-privacy">
+    连接后，AI 可通过你配置的 Bridge 读取标签页信息、网页内容、截图、调试日志，并执行网页操作；启动录制后还可记录输入内容。数据会发送到 Bridge 及其连接的 AI 客户端，可能离开本机。请仅连接可信服务，并避免在敏感页面使用。
+    <a href="/privacy.html" target="_blank" rel="noopener">隐私政策 / Privacy policy</a>
+    <label class="bl-consent"><input id="bl-consent" type="checkbox" />我同意上述数据访问和传输，并启用 Bridge 连接</label>
+    <button id="bl-apply-consent" type="button">应用授权设置</button>
+  </div>
   <details id="bl-conn">
-    <summary>连接设置（Host / Port / Token）</summary>
+    <summary>桥接服务（可同时连接多个）</summary>
+    <label>选择服务 <select id="bl-service"></select></label>
+    <div class="bl-service-actions"><button id="bl-add" type="button">添加服务</button><button id="bl-delete" type="button">删除服务</button></div>
+    <label>服务名称 <input id="bl-name" type="text" placeholder="例如：开发机 / 笔记本" /></label>
+    <label class="bl-consent"><input id="bl-enabled" type="checkbox" />启用此服务</label>
     <label>Host <input id="bl-host" type="text" placeholder="127.0.0.1" /></label>
     <label>Port <input id="bl-port" type="number" min="1" max="65535" placeholder="19222" /></label>
     <label>Token <span style="color:#7b8794">（跨机时必填）</span>
       <input id="bl-token" type="password" placeholder="BRIDGELENS_TOKEN" autocomplete="off" /></label>
-    <button id="bl-save">保存并重连</button>
+    <button id="bl-save">保存此服务</button>
   </details>
   <hr />
   <h2 class="bl-h2">目标标签页 <button id="bl-clear-all">全部取消</button></h2>
@@ -83,6 +99,13 @@ export function mountControls(root: HTMLElement): void {
   root.classList.add("bl");
   root.innerHTML = MARKUP;
 
+  const serviceSelect = root.querySelector<HTMLSelectElement>("#bl-service")!;
+  const nameInput = root.querySelector<HTMLInputElement>("#bl-name")!;
+  const enabledInput = root.querySelector<HTMLInputElement>("#bl-enabled")!;
+  const addBtn = root.querySelector<HTMLButtonElement>("#bl-add")!;
+  const deleteBtn = root.querySelector<HTMLButtonElement>("#bl-delete")!;
+  let profiles: BridgeProfile[] = [];
+  let selectedId = "";
   const statusEl = root.querySelector<HTMLDivElement>("#bl-status")!;
   const hostInput = root.querySelector<HTMLInputElement>("#bl-host")!;
   const portInput = root.querySelector<HTMLInputElement>("#bl-port")!;
@@ -91,36 +114,107 @@ export function mountControls(root: HTMLElement): void {
   const targetEl = root.querySelector<HTMLDivElement>("#bl-target")!;
   const tablistEl = root.querySelector<HTMLDivElement>("#bl-tablist")!;
   const clearAllBtn = root.querySelector<HTMLButtonElement>("#bl-clear-all")!;
+  const consentInput = root.querySelector<HTMLInputElement>("#bl-consent")!;
+  const applyConsentBtn = root.querySelector<HTMLButtonElement>("#bl-apply-consent")!;
 
-  function refreshStatus() {
+  async function refreshStatus() {
+    const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
+    if (bridgeConsent !== true) {
+      statusEl.textContent = "连接已暂停：请阅读数据说明，勾选并应用授权后再连接。";
+      statusEl.className = "status";
+      return;
+    }
     chrome.runtime.sendMessage({ type: "bridgelens-get-status" }, (res) => {
       if (chrome.runtime.lastError || !res) {
         statusEl.textContent = "状态未知";
         statusEl.className = "status";
         return;
       }
-      statusEl.textContent = res.connected
-        ? `已连接 ${res.url}`
-        : `未连接到桥接服务${res.url ? `：${res.url}` : ""}\n请检查：运行 AI 的电脑上是否已启动 AgentBridgeLens 桥接服务；下方 Host / Port 是否指向该服务，Token 是否一致。跨电脑连接还需确认网络可达。`;
-      statusEl.className = res.connected ? "status ok" : "status bad";
+      const bridges = res.bridges as { id: string; name: string; url: string; connected: boolean }[] | undefined;
+      statusEl.textContent = bridges?.length
+        ? bridges.map((bridge) => `${bridge.connected ? "已连接" : "未连接"} · ${bridge.name} · ${bridge.url}`).join("\n")
+        : "暂无启用的桥接服务，请在下方添加并保存。";
+      if (bridges?.some((bridge) => !bridge.connected)) {
+        statusEl.textContent += "\n请检查对应服务是否启动，Host / Port / Token 是否一致，以及网络是否可达。";
+      }
+      statusEl.className = bridges?.length && bridges.every((bridge) => bridge.connected) ? "status ok" : "status bad";
     });
   }
 
-  async function loadConfig() {
-    const { host, port, token } = await getBridgeConfig();
-    hostInput.value = host;
-    portInput.value = String(port);
-    tokenInput.value = token;
+  function renderEditor() {
+    serviceSelect.replaceChildren();
+    for (const profile of profiles) {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = `${profile.enabled ? "" : "已停用 · "}${profile.name}`;
+      serviceSelect.appendChild(option);
+    }
+    const profile = profiles.find((p) => p.id === selectedId);
+    serviceSelect.value = selectedId;
+    nameInput.value = profile?.name ?? "";
+    hostInput.value = profile?.host ?? DEFAULT_HOST;
+    portInput.value = String(profile?.port ?? DEFAULT_PORT);
+    tokenInput.value = profile?.token ?? "";
+    enabledInput.checked = profile?.enabled ?? true;
+    saveBtn.disabled = !profile;
+    deleteBtn.disabled = !profile;
   }
 
+  async function loadConfig() {
+    profiles = await getBridgeProfiles();
+    selectedId = profiles[0]?.id ?? "";
+    renderEditor();
+    const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
+    consentInput.checked = bridgeConsent === true;
+  }
+
+  serviceSelect.addEventListener("change", () => {
+    selectedId = serviceSelect.value;
+    renderEditor();
+  });
+  addBtn.addEventListener("click", () => {
+    selectedId = crypto.randomUUID();
+    profiles.push({ id: selectedId, name: `服务 ${profiles.length + 1}`, host: DEFAULT_HOST, port: DEFAULT_PORT, token: "", enabled: true });
+    renderEditor();
+  });
+  deleteBtn.addEventListener("click", async () => {
+    try {
+      const saved = await getBridgeProfiles();
+      await setBridgeProfiles(saved.filter((p) => p.id !== selectedId));
+      await loadConfig();
+      await refreshStatus();
+    } catch (error) {
+      statusEl.textContent = String(error);
+      statusEl.className = "status bad";
+    }
+  });
+
+  applyConsentBtn.addEventListener("click", async () => {
+    await chrome.storage.local.set({ bridgeConsent: consentInput.checked });
+    await refreshStatus();
+  });
+
   saveBtn.addEventListener("click", async () => {
-    const host = hostInput.value.trim() || DEFAULT_HOST;
-    const port = parseInt(portInput.value, 10) || DEFAULT_PORT;
-    const token = tokenInput.value.trim();
-    await setBridgeConfig({ host, port, token });
-    statusEl.textContent = "已保存，重连中…";
-    statusEl.className = "status";
-    setTimeout(refreshStatus, 600);
+    const profile: BridgeProfile = {
+      id: selectedId, name: nameInput.value.trim() || "未命名服务",
+      host: hostInput.value.trim() || DEFAULT_HOST,
+      port: Number(portInput.value || DEFAULT_PORT), token: tokenInput.value.trim(),
+      enabled: enabledInput.checked,
+    };
+    try {
+      const saved = await getBridgeProfiles();
+      const updated = saved.filter((p) => p.id !== selectedId);
+      updated.push(profile);
+      await setBridgeProfiles(updated);
+      profiles = updated;
+      renderEditor();
+      statusEl.textContent = "已保存服务设置，正在检查连接…";
+      statusEl.className = "status";
+      setTimeout(refreshStatus, 600);
+    } catch (error) {
+      statusEl.textContent = error instanceof Error ? error.message : String(error);
+      statusEl.className = "status bad";
+    }
   });
 
   clearAllBtn.addEventListener("click", async () => {

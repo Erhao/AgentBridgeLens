@@ -11,12 +11,12 @@ const confirmOptions = document.getElementById("confirm-options") as HTMLDivElem
 
 let logCount = 0;
 
-function appendLog(tool: string, ts: number) {
+function appendLog(tool: string, ts: number, bridgeName: string) {
   if (logCount === 0) logEl.innerHTML = "";
   logCount++;
   const li = document.createElement("li");
   const name = document.createElement("span");
-  name.textContent = tool;
+  name.textContent = `${bridgeName} · ${tool}`;
   const time = document.createElement("span");
   time.className = "t";
   time.textContent = new Date(ts).toLocaleTimeString();
@@ -26,25 +26,41 @@ function appendLog(tool: string, ts: number) {
   while (logEl.children.length > 100) logEl.removeChild(logEl.lastChild!);
 }
 
-function showConfirm(cid: string, message: string, options: string[]) {
-  confirmMsg.textContent = message;
+interface Confirmation {
+  cid: string;
+  message: string;
+  options: string[];
+  bridgeName: string;
+  bridgeUrl: string;
+}
+const confirmations: Confirmation[] = [];
+function renderConfirm() {
+  const current = confirmations[0];
+  confirmEl.style.display = current ? "block" : "none";
+  if (!current) return;
+  confirmMsg.textContent = `${current.bridgeName} (${current.bridgeUrl})：${current.message}`;
   confirmOptions.innerHTML = "";
-  for (const opt of options) {
+  for (const opt of current.options) {
     const btn = document.createElement("button");
     btn.textContent = opt;
     btn.addEventListener("click", () => {
-      chrome.runtime.sendMessage({ type: "bridgelens-confirm-result", cid, choice: opt });
-      confirmEl.style.display = "none";
+      chrome.runtime.sendMessage({ type: "bridgelens-confirm-result", cid: current.cid, choice: opt });
+      confirmations.shift();
+      renderConfirm();
     });
     confirmOptions.appendChild(btn);
   }
-  confirmEl.style.display = "block";
 }
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "bridgelens-activity") {
-    appendLog(message.tool, message.ts);
+    appendLog(message.tool, message.ts, message.bridgeName || "Bridge");
   } else if (message?.type === "bridgelens-confirm") {
-    showConfirm(message.cid, message.message, message.options);
+    confirmations.push(message);
+    renderConfirm();
+  } else if (message?.type === "bridgelens-confirm-dismiss") {
+    const index = confirmations.findIndex((item) => item.cid === message.cid);
+    if (index !== -1) confirmations.splice(index, 1);
+    renderConfirm();
   }
 });

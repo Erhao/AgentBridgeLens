@@ -11,6 +11,12 @@ AI Agent ←─ MCP (stdio / Streamable HTTP) ─→ Bridge Server ←─WebSock
 - **Bridge Server**: Thin MCP relay (~200 lines) — translates MCP tool calls to WebSocket messages
 - **Chrome Extension**: Manifest V3 — DOM inspection, screenshots, visual overlays, console/network capture
 
+Extension 1.1.0 can connect to multiple bridge servers simultaneously. Add each
+server's Host/Port/Token in the popup or side panel; connections reconnect
+independently and replies return only to the requesting bridge. Existing single
+server settings are preserved. All bridges share browser and target-tab state;
+use explicit `tabId` for coordinated work. See [multi-bridge setup](docs/USAGE.md#同一个-chrome-同时连接多个桥接服务).
+
 > 详细架构、组件通信链路与配置说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 > 面向用户的上手与使用指南见 [docs/USAGE.md](docs/USAGE.md)。
 

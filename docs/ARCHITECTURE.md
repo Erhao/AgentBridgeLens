@@ -54,6 +54,12 @@ Claude Code 按 MCP 配置把 Bridge Server 当作**子进程**启动，通过�
 
 ### 2.2 Bridge Server ↔ Extension：WebSocket
 
+扩展 1.1.0 起由 `background/bridge-connections.ts` 管理多条 WebSocket：每个
+`bridgeProfiles` 配置项有独立连接、重连计时器和断开信号。保存旧配置时自动兼容
+原有单服务 Host/Port/Token；所有连接都受 `bridgeConsent` 控制。每个请求闭包保留
+原始 socket，断开后的结果不会发送到新连接或其他桥接服务。侧栏标注来源并排队确认，
+但浏览器目标页和页面操作状态仍共享，不提供服务之间的隔离。
+
 Bridge Server 默认在 `127.0.0.1:19222` 起一个 **WebSocket Server**（`packages/bridge/src/ws-relay.ts`），端口可通过环境变量 `BRIDGELENS_PORT` 覆盖。Chrome 扩展的 Service Worker 是 **WebSocket 客户端**，主动连接上来，断线后每 3 秒自动重连。扩展侧的 host/port 由用户在扩展弹窗（popup）里配置，存在 `chrome.storage.local`，改动后自动重连——两端默认值统一为 `127.0.0.1:19222`。
 
 消息格式（`packages/bridge/src/protocol.ts`）：

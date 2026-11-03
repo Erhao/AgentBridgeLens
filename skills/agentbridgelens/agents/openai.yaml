@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentBridgeLens 网页小助手"
+  short_description: "用一句话让 AI 看懂浏览器页面，带新手完成连接、排查问题和验证修复"
+  default_prompt: "请用 $agentbridgelens 看看我打开的网页，先确认连接，再用我能听懂的话帮我解决问题。"

@@ -1,3 +1,4 @@
+import { packageUpdater } from "./updater-package.mjs";
 import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -32,6 +33,7 @@ export async function prepare(_config, { cwd, nextRelease, logger }) {
   await copyFile(join(cwd, `${packageName}.zip`), join(out, filename));
   const hash = createHash("sha256").update(await readFile(join(out, filename))).digest("hex");
   await writeFile(join(out, `${filename}.sha256`), `${hash}  ${filename}\n`);
+  await packageUpdater(cwd, out);
   await writeFile(join(out, "release-notes.md"), nextRelease.notes ?? "");
   logger.log("Built %s", filename);
 }

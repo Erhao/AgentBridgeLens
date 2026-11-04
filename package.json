@@ -10,7 +10,8 @@
     "typecheck": "pnpm -r typecheck",
     "test:release": "node --test scripts/release/*.test.mjs",
     "release": "semantic-release",
-    "release:dry-run": "semantic-release --dry-run"
+    "release:dry-run": "semantic-release --dry-run",
+    "test:updater": "node --test scripts/update/*.test.mjs"
   },
   "devDependencies": {
     "@semantic-release/commit-analyzer": "13.0.1",

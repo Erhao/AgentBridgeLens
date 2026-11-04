@@ -47,6 +47,24 @@ ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node packages/extension/test
 预编译扩展安装包可从 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 下载。
 `main` 的版本由 semantic-release 计算并通过 GitHub Actions 自动发布，见 [发布流程](docs/RELEASING.md)。
 
+### 已安装用户：固定目录一键更新
+
+从 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 下载一次
+`agentbridgelens-updater.zip` 并保留解压后的工具目录。需要 Node.js 20+，无需安装 npm 依赖。
+Windows 双击 `update-extension.cmd`，macOS 运行 `update-extension.command`，Linux 运行 `sh update-extension.sh`。
+首次填写 Chrome 扩展详情中显示的**原加载目录**；以后会记住目录，自动下载最新正式版、校验 SHA256、替换扩展文件并保留上一版。
+完成后只需在 `chrome://extensions` 点原插件的「重新加载」，然后刷新需要操作的网页。
+**不要删除原插件或换新目录重新导入**，这样升级时桥接配置和显示偏好会保留。
+首次安装用户可在目录提示处直接回车，使用 `~/.agentbridgelens/extension`，之后在 Chrome 中加载一次该目录。
+
+```bash
+node update-extension.mjs --dir "原扩展目录"  # 第一次指定，之后可省略
+node update-extension.mjs --check            # 仅检查版本
+node update-extension.mjs --rollback         # 恢复上一版，仍使用原目录
+```
+
+完整说明见更新工具中的 `README.txt`。此方式保留本机 Chrome 配置，不承担重装或换电脑时的配置迁移。
+
 ### 1. Install dependencies
 
 ```bash

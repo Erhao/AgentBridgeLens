@@ -34,8 +34,22 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  verify-updater:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test scripts/update/*.test.mjs
+
   release:
-    needs: verify
+    needs: [verify, verify-updater]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:

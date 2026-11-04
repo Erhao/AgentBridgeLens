@@ -1,3 +1,4 @@
+import { extractZip, validateExtension } from "../update/update-extension.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -59,6 +60,7 @@ test("prepare builds a real versioned ZIP with manifest, scripts and matching ch
   const cwd = await mkdtemp(join(tmpdir(), "bridgelens-release-"));
   try {
     await mkdir(join(cwd, "packages"));
+    await cp(join(root, "scripts/update"), join(cwd, "scripts/update"), { recursive: true });
     await cp(join(root, "packages/extension"), join(cwd, "packages/extension"), {
       recursive: true,
       filter: (path) => !["node_modules", "dist"].includes(basename(path)),
@@ -73,6 +75,10 @@ test("prepare builds a real versioned ZIP with manifest, scripts and matching ch
     await prepare({}, { cwd, nextRelease: { version: "2.3.4", notes: "Test release" }, logger });
     const name = "agentbridgelens-extension-2.3.4.zip";
     const zip = await readFile(join(cwd, "release", name));
+    const extracted = join(cwd, "extracted");
+    await mkdir(extracted);
+    await extractZip(zip, extracted);
+    assert.equal((await validateExtension(extracted)).version, "2.3.4");
     const manifest = JSON.parse(zipEntry(zip, "manifest.json"));
     assert.equal(manifest.version, "2.3.4");
     assert.ok(zipEntry(zip, manifest.background.service_worker).length > 0);
@@ -83,6 +89,13 @@ test("prepare builds a real versioned ZIP with manifest, scripts and matching ch
     assert.equal(await readFile(join(cwd, "release/release-notes.md"), "utf8"), "Test release");
     const source = JSON.parse(await readFile(join(cwd, "packages/extension/package.json"), "utf8"));
     assert.equal(source.version, "2.3.4");
+    const updater = await readFile(join(cwd, "release/agentbridgelens-updater.zip"));
+    assert.match(zipEntry(updater, "update-extension.mjs").toString(), /export async function update/);
+    assert.match(zipEntry(updater, "update-extension.cmd").toString(), /node/);
+    assert.match(zipEntry(updater, "update-extension.command").toString(), /node/);
+    assert.match(zipEntry(updater, "README.txt").toString(), /原目录/);
+    assert.equal(await readFile(join(cwd, "release/agentbridgelens-updater.zip.sha256"), "utf8"),
+      `${createHash("sha256").update(updater).digest("hex")}  agentbridgelens-updater.zip\n`);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

@@ -47,12 +47,15 @@ const MARKUP = `
   <div id="bl-status" class="status">检查连接中…</div>
   <label class="bl-consent"><input id="bl-activity-enabled" type="checkbox" checked />显示实时操作状态</label>
   <div id="bl-activity" class="status" role="status" aria-live="polite">等待 Agent 调用…</div>
-  <div class="bl-privacy">
+  <details id="bl-privacy">
+    <summary>数据访问与授权</summary>
+    <div class="bl-privacy" style="margin-top:8px">
     连接后，AI 可通过你配置的 Bridge 读取标签页信息、网页内容、截图、调试日志，并执行网页操作；启动录制后还可记录输入内容。数据会发送到 Bridge 及其连接的 AI 客户端，可能离开本机。请仅连接可信服务，并避免在敏感页面使用。
     <a href="/privacy.html" target="_blank" rel="noopener">隐私政策 / Privacy policy</a>
     <label class="bl-consent"><input id="bl-consent" type="checkbox" />我同意上述数据访问和传输，并启用 Bridge 连接</label>
     <button id="bl-apply-consent" type="button">应用授权设置</button>
-  </div>
+    </div>
+  </details>
   <details id="bl-conn">
     <summary>桥接服务（可同时连接多个）</summary>
     <label>选择服务 <select id="bl-service"></select></label>
@@ -117,6 +120,7 @@ export function mountControls(root: HTMLElement): void {
   const targetEl = root.querySelector<HTMLDivElement>("#bl-target")!;
   const tablistEl = root.querySelector<HTMLDivElement>("#bl-tablist")!;
   const clearAllBtn = root.querySelector<HTMLButtonElement>("#bl-clear-all")!;
+  const privacyDetails = root.querySelector<HTMLDetailsElement>("#bl-privacy")!;
   const consentInput = root.querySelector<HTMLInputElement>("#bl-consent")!;
   const applyConsentBtn = root.querySelector<HTMLButtonElement>("#bl-apply-consent")!;
 
@@ -207,6 +211,7 @@ export function mountControls(root: HTMLElement): void {
     renderEditor();
     const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
     consentInput.checked = bridgeConsent === true;
+    privacyDetails.open = !consentInput.checked;
   }
 
   serviceSelect.addEventListener("change", () => {
@@ -232,6 +237,7 @@ export function mountControls(root: HTMLElement): void {
 
   applyConsentBtn.addEventListener("click", async () => {
     await chrome.storage.local.set({ bridgeConsent: consentInput.checked });
+    privacyDetails.open = !consentInput.checked;
     await refreshStatus();
   });
 

@@ -3,6 +3,7 @@ import type {
   ContentRequest,
   ContentResponse,
 } from "../shared/protocol";
+import { describeActivity, type Activity } from "../shared/activity";
 import { getBridgeProfiles } from "../shared/config";
 import { BridgeConnections, type BridgeSource } from "./bridge-connections";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
@@ -148,9 +149,36 @@ function requestConfirmation(message: string, options: string[], source: BridgeS
   });
 }
 
+const activeActivities = new Map<string, Activity>();
+let lastActivity: Activity | undefined;
+function publishActivities() {
+  broadcast({ type: "bridgelens-activities", active: [...activeActivities.values()], last: lastActivity });
+}
+
 async function handleToolCall(request: BridgeRequest, source: BridgeSource): Promise<unknown> {
+  const activity: Activity = {
+    id: crypto.randomUUID(), tool: request.tool, ...describeActivity(request.tool, request.params),
+    bridgeName: source.name, state: "running", startedAt: Date.now(),
+  };
+  activeActivities.set(activity.id, activity);
+  publishActivities();
+  try {
+    const result = await executeToolCall(request, source, activity);
+    activity.state = result && typeof result === "object" && "error" in result ? "failed" : "completed";
+    return result;
+  } catch (error) {
+    activity.state = "failed";
+    throw error;
+  } finally {
+    activity.finishedAt = Date.now();
+    activeActivities.delete(activity.id);
+    lastActivity = activity;
+    publishActivities();
+  }
+}
+
+async function executeToolCall(request: BridgeRequest, source: BridgeSource, activity: Activity): Promise<unknown> {
   const { tool, params } = request;
-  broadcast({ type: "bridgelens-activity", tool, ts: Date.now(), bridgeId: source.id, bridgeName: source.name, bridgeUrl: source.url });
 
   // —— 不针对具体页面的管理类工具 ——
   switch (tool) {
@@ -170,6 +198,15 @@ async function handleToolCall(request: BridgeRequest, source: BridgeSource): Pro
 
   // —— 页面类工具：解析目标 tab（显式 tabId > 固定目标 > 激活）——
   const tabId = await resolveTabId(params.tabId as number | undefined);
+
+  activity.tabId = tabId;
+  // Metadata lookup must never prevent a tool from running.
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    activity.page = tab.title;
+    if (tab.url) activity.site = new URL(tab.url).origin;
+  } catch { /* tab may have closed */ }
+  publishActivities();
 
   switch (tool) {
     case "capture_screenshot":
@@ -207,7 +244,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "bridgelens-get-status") {
+  if (message?.type === "bridgelens-get-activities") {
+    sendResponse({ active: [...activeActivities.values()], last: lastActivity });
+  } else if (message?.type === "bridgelens-get-status") {
     const bridges = connections.status();
     sendResponse({ connected: bridges.some((bridge) => bridge.connected), bridges });
   } else if (message?.type === "bridgelens-confirm-result") {

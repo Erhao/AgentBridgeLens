@@ -3,28 +3,10 @@ import { mountControls } from "../shared/panel-ui";
 // 连接配置 + 目标标签页控件，与点击扩展图标弹出的 popup 完全一致。
 mountControls(document.getElementById("controls")!);
 
-// —— side panel 特有：Agent 活动日志 + 交互式确认 ——
-const logEl = document.getElementById("log") as HTMLUListElement;
+// —— side panel 特有：交互式确认 ——
 const confirmEl = document.getElementById("confirm") as HTMLDivElement;
 const confirmMsg = document.getElementById("confirm-msg") as HTMLParagraphElement;
 const confirmOptions = document.getElementById("confirm-options") as HTMLDivElement;
-
-let logCount = 0;
-
-function appendLog(tool: string, ts: number, bridgeName: string) {
-  if (logCount === 0) logEl.innerHTML = "";
-  logCount++;
-  const li = document.createElement("li");
-  const name = document.createElement("span");
-  name.textContent = `${bridgeName} · ${tool}`;
-  const time = document.createElement("span");
-  time.className = "t";
-  time.textContent = new Date(ts).toLocaleTimeString();
-  li.appendChild(name);
-  li.appendChild(time);
-  logEl.insertBefore(li, logEl.firstChild);
-  while (logEl.children.length > 100) logEl.removeChild(logEl.lastChild!);
-}
 
 interface Confirmation {
   cid: string;
@@ -53,9 +35,7 @@ function renderConfirm() {
 }
 
 chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === "bridgelens-activity") {
-    appendLog(message.tool, message.ts, message.bridgeName || "Bridge");
-  } else if (message?.type === "bridgelens-confirm") {
+  if (message?.type === "bridgelens-confirm") {
     confirmations.push(message);
     renderConfirm();
   } else if (message?.type === "bridgelens-confirm-dismiss") {

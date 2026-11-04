@@ -48,30 +48,6 @@
         color: #7b8794;
         margin: 14px 0 6px;
       }
-      #log {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        max-height: 30vh;
-        overflow: auto;
-      }
-      #log li {
-        padding: 4px 6px;
-        border-bottom: 1px solid #eef1f4;
-        font-family: ui-monospace, monospace;
-        font-size: 12px;
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      #log li .t {
-        color: #9aa5b1;
-        flex: 0 0 auto;
-      }
-      .empty {
-        color: #9aa5b1;
-        font-style: italic;
-      }
     </style>
   </head>
   <body>
@@ -82,10 +58,6 @@
 
     <div id="controls"></div>
 
-    <h2 class="sec">Agent 活动</h2>
-    <ul id="log">
-      <li class="empty">等待 agent 调用…</li>
-    </ul>
 
     <script type="module" src="./panel.ts"></script>
   </body>

@@ -17,6 +17,13 @@ independently and replies return only to the requesting bridge. Existing single
 server settings are preserved. All bridges share browser and target-tab state;
 use explicit `tabId` for coordinated work. See [multi-bridge setup](docs/USAGE.md#同一个-chrome-同时连接多个桥接服务).
 
+弹窗和侧边栏提供「显示实时操作状态」开关（默认开启，自动记住选择）。
+状态区显示正在执行的调用、实际目标页面及标签页 ID、Bridge 名称、数据类别
+（例如 DOM、网络、控制台、性能）和适用的元素/筛选范围；完成后显示最近一次结果与耗时。
+多项并行调用分别展示，重新打开面板也能获取当前状态。关闭显示不影响工具执行。
+这里只展示操作元信息，不展示脚本正文、请求正文或返回数据；状态保存在后台内存中，
+扩展后台重启后清空。需要持续查看时请保持侧边栏打开。
+
 > 详细架构、组件通信链路与配置说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 > 面向用户的上手与使用指南见 [docs/USAGE.md](docs/USAGE.md)。
 

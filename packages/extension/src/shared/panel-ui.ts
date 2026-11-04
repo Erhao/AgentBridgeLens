@@ -1,3 +1,4 @@
+import { formatActivity, type Activity } from "./activity";
 /**
  * popup 与 side panel 共用的「连接配置 + 目标标签页」控件。
  * mountControls(root) 注入样式 + 构建 DOM + 接好全部逻辑。
@@ -44,6 +45,8 @@ const STYLE = `
 const MARKUP = `
   <h1 class="bl-h1">AgentBridgeLens</h1>
   <div id="bl-status" class="status">检查连接中…</div>
+  <label class="bl-consent"><input id="bl-activity-enabled" type="checkbox" checked />显示实时操作状态</label>
+  <div id="bl-activity" class="status" role="status" aria-live="polite">等待 Agent 调用…</div>
   <div class="bl-privacy">
     连接后，AI 可通过你配置的 Bridge 读取标签页信息、网页内容、截图、调试日志，并执行网页操作；启动录制后还可记录输入内容。数据会发送到 Bridge 及其连接的 AI 客户端，可能离开本机。请仅连接可信服务，并避免在敏感页面使用。
     <a href="/privacy.html" target="_blank" rel="noopener">隐私政策 / Privacy policy</a>
@@ -116,6 +119,44 @@ export function mountControls(root: HTMLElement): void {
   const clearAllBtn = root.querySelector<HTMLButtonElement>("#bl-clear-all")!;
   const consentInput = root.querySelector<HTMLInputElement>("#bl-consent")!;
   const applyConsentBtn = root.querySelector<HTMLButtonElement>("#bl-apply-consent")!;
+
+  const activityToggle = root.querySelector<HTMLInputElement>("#bl-activity-enabled")!;
+  const activityEl = root.querySelector<HTMLDivElement>("#bl-activity")!;
+  let activitySnapshot: { active?: Activity[]; last?: Activity } = {};
+  let activityVersion = 0;
+  function renderActivity() {
+    activityEl.hidden = !activityToggle.checked;
+    if (!activityToggle.checked) return;
+    const active = activitySnapshot.active ?? [];
+    activityEl.textContent = active.length
+      ? active.map(formatActivity).join("\n\n")
+      : activitySnapshot.last ? `当前空闲 · 最近一次操作\n${formatActivity(activitySnapshot.last)}` : "等待 Agent 调用…";
+  }
+  activityToggle.addEventListener("change", () => {
+    renderActivity();
+    void chrome.storage.local.set({ activityDisplayEnabled: activityToggle.checked });
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.activityDisplayEnabled) {
+      activityToggle.checked = changes.activityDisplayEnabled.newValue !== false;
+      renderActivity();
+    }
+  });
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "bridgelens-activities") return;
+    activityVersion++;
+    activitySnapshot = message;
+    renderActivity();
+  });
+  const initialActivityVersion = activityVersion;
+  void chrome.runtime.sendMessage({ type: "bridgelens-get-activities" }).then((snapshot) => {
+    if (activityVersion === initialActivityVersion && snapshot) activitySnapshot = snapshot;
+    renderActivity();
+  }).catch(() => {});
+  void chrome.storage.local.get("activityDisplayEnabled").then(({ activityDisplayEnabled }) => {
+    activityToggle.checked = activityDisplayEnabled !== false;
+    renderActivity();
+  });
 
   async function refreshStatus() {
     const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");

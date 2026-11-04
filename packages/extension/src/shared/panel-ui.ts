@@ -13,6 +13,7 @@ const STYLE = `
   .status { font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 12px; background: #f0f2f5; white-space: pre-line; overflow-wrap: anywhere; }
   .status.ok { background: #e3f9e5; color: #207227; }
   .status.bad { background: #fff0f0; color: #ab1c1c; }
+  .bl [hidden] { display: none !important; }
   .bl label { display: block; font-size: 12px; margin-bottom: 8px; }
   .bl select { max-width: 100%; padding: 5px; margin: 4px 0; }
   .bl .bl-service-actions { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -29,6 +30,8 @@ const STYLE = `
   .bl-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #7b8794; margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between; }
   #bl-clear-all { text-transform: none; letter-spacing: 0; background: none; border: none; color: #4a90d9; cursor: pointer; font-size: 11px; padding: 0; }
   .bl-target { font-size: 12px; background: #eef4fb; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; word-break: break-all; }
+  .bl .bl-target-select { display: block; width: 100%; box-sizing: border-box; }
+  .bl .bl-target-help { font-size: 12px; color: #627080; line-height: 1.5; margin: 4px 0 8px; }
   #bl-tablist { max-height: 440px; overflow: auto; border: 1px solid #eef1f4; border-radius: 6px; }
   .bl-tab { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-bottom: 1px solid #f3f5f7; font-size: 12px; }
   .bl-tab:last-child { border-bottom: none; }
@@ -69,9 +72,24 @@ const MARKUP = `
     <button id="bl-save">保存此服务</button>
   </details>
   <hr />
-  <h2 class="bl-h2">目标标签页 <button id="bl-clear-all">全部取消</button></h2>
-  <div id="bl-target" class="bl-target">跟随当前激活标签页</div>
-  <div id="bl-tablist"></div>
+  <h2 class="bl-h2">操作页面</h2>
+  <label>操作方式
+    <select id="bl-target-mode" class="bl-target-select">
+      <option value="current">操作当前页</option>
+      <option value="pinned">固定指定页</option>
+    </select>
+  </label>
+  <label id="bl-page-picker" hidden>指定页面
+    <select id="bl-target-page" class="bl-target-select" aria-label="选择固定操作的页面"></select>
+  </label>
+  <div id="bl-target" class="bl-target">正在获取操作页面…</div>
+  <p class="bl-target-help">操作当前页会随你切换标签页；固定后，切换标签页也会继续操作指定页面。</p>
+  <details id="bl-target-advanced">
+    <summary>高级设置：多目标与新标签跟随</summary>
+    <p class="bl-target-help">可添加多个固定页面，并选择是否自动加入它打开的新标签。多个目标时优先使用当前激活的目标，否则使用最后加入的目标。AI 明确指定页面时以指定页面为准；所有 Bridge 共用此设置。</p>
+    <h3 class="bl-h2">固定页面 <button id="bl-clear-all">全部取消</button></h3>
+    <div id="bl-tablist"></div>
+  </details>
 `;
 
 async function getTargets(): Promise<number[]> {
@@ -118,6 +136,10 @@ export function mountControls(root: HTMLElement): void {
   const tokenInput = root.querySelector<HTMLInputElement>("#bl-token")!;
   const saveBtn = root.querySelector<HTMLButtonElement>("#bl-save")!;
   const targetEl = root.querySelector<HTMLDivElement>("#bl-target")!;
+  const targetMode = root.querySelector<HTMLSelectElement>("#bl-target-mode")!;
+  const pagePicker = root.querySelector<HTMLLabelElement>("#bl-page-picker")!;
+  const targetPage = root.querySelector<HTMLSelectElement>("#bl-target-page")!;
+  const advancedTargets = root.querySelector<HTMLDetailsElement>("#bl-target-advanced")!;
   const tablistEl = root.querySelector<HTMLDivElement>("#bl-tablist")!;
   const clearAllBtn = root.querySelector<HTMLButtonElement>("#bl-clear-all")!;
   const privacyDetails = root.querySelector<HTMLDetailsElement>("#bl-privacy")!;
@@ -264,78 +286,153 @@ export function mountControls(root: HTMLElement): void {
     }
   });
 
+  let targetMutation = false;
+  async function changeTargetMode() {
+    targetMutation = true;
+    targetMode.disabled = true;
+    targetPage.disabled = true;
+    try {
+      if (targetMode.value === "current") {
+        await setTargets([]);
+      } else {
+        const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (typeof active?.id !== "number") throw new Error("没有可固定的当前页面");
+        await setTargets([active.id]);
+      }
+    } catch (error) {
+      targetEl.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      targetMutation = false;
+      targetMode.disabled = false;
+      targetPage.disabled = false;
+      void renderTabs();
+    }
+  }
+  targetMode.addEventListener("change", () => { void changeTargetMode(); });
+  targetPage.addEventListener("change", async () => {
+    if (!targetPage.value) return;
+    targetMutation = true;
+    targetMode.disabled = true;
+    targetPage.disabled = true;
+    try {
+      await setTargets([Number(targetPage.value)]);
+    } finally {
+      targetMutation = false;
+      targetMode.disabled = false;
+      targetPage.disabled = false;
+      void renderTabs();
+    }
+  });
+  advancedTargets.addEventListener("toggle", () => { void renderTabs(); });
+
   clearAllBtn.addEventListener("click", async () => {
     await setTargets([]);
     renderTabs();
   });
 
+  let renderingTabs = false;
+  let pageOptionsKey = "";
   async function renderTabs() {
-    const targets = await getTargets();
-    const policies = await getTabPolicies();
-    const fallback = await getGlobalPolicy();
-    const tabs = await chrome.tabs.query({});
+    if (renderingTabs || targetMutation) return;
+    renderingTabs = true;
+    try {
+      const [targets, policies, fallback, tabs, activeTabs] = await Promise.all([
+        getTargets(), getTabPolicies(), getGlobalPolicy(), chrome.tabs.query({}),
+        chrome.tabs.query({ active: true, currentWindow: true }),
+      ]);
+      if (targetMutation) return;
+      const liveTargets = targets.filter((id) => tabs.some((t) => t.id === id));
+      const pinned = liveTargets.length > 0;
+      targetMode.value = pinned ? "pinned" : "current";
+      pagePicker.hidden = !pinned;
+      const fixedPage = tabs.find((tab) => tab.id === liveTargets[0]);
+      targetEl.textContent = !pinned
+        ? `当前页：${activeTabs[0]?.title || "暂无可用页面"}`
+        : liveTargets.length === 1
+          ? `已固定：${fixedPage?.title || "(无标题)"}`
+          : `已固定 ${liveTargets.length} 个页面，可在高级设置中管理`;
 
-    const liveTargets = targets.filter((id) => tabs.some((t) => t.id === id));
-    targetEl.textContent =
-      liveTargets.length === 0
-        ? "跟随当前激活标签页"
-        : `🎯 已固定 ${liveTargets.length} 个（无 tabId 调用时用最近活跃的那个）`;
-
-    tablistEl.innerHTML = "";
-    for (const t of tabs) {
-      if (typeof t.id !== "number") continue;
-      const id = t.id;
-      const isTarget = targets.includes(id);
-      const row = document.createElement("div");
-      row.className = "bl-tab" + (isTarget ? " is-target" : "");
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      const title = document.createElement("div");
-      title.className = "t";
-      title.textContent = t.title || "(无标题)";
-      const url = document.createElement("div");
-      url.className = "u";
-      try {
-        url.textContent = t.url ? new URL(t.url).host || t.url : "";
-      } catch {
-        url.textContent = t.url || "";
+      // Avoid rebuilding native select options during the periodic refresh when unchanged.
+      const optionsKey = JSON.stringify([tabs.map((tab) => [tab.id, tab.title]), liveTargets]);
+      if (optionsKey !== pageOptionsKey) {
+        pageOptionsKey = optionsKey;
+        targetPage.replaceChildren();
+        if (liveTargets.length > 1) {
+          const multi = document.createElement("option");
+          multi.value = "";
+          multi.textContent = `已固定 ${liveTargets.length} 个页面（选择一个将改为单目标）`;
+          multi.disabled = true;
+          targetPage.appendChild(multi);
+        }
+        for (const tab of tabs) {
+          if (typeof tab.id !== "number") continue;
+          const option = document.createElement("option");
+          option.value = String(tab.id);
+          option.textContent = tab.title || "(无标题)";
+          targetPage.appendChild(option);
+        }
+        targetPage.value = liveTargets.length === 1 ? String(liveTargets[0]) : "";
       }
-      meta.appendChild(title);
-      meta.appendChild(url);
-      row.appendChild(meta);
 
-      if (isTarget) {
-        // 每个目标各自的新标签策略
-        const sel = document.createElement("select");
-        sel.innerHTML =
-          '<option value="stay">不跟随</option><option value="follow">跟随新标签</option>';
-        sel.value = policies[String(id)] ?? fallback;
-        sel.title = "该目标页打开新标签时的处理";
-        sel.addEventListener("change", () => setTabPolicy(id, sel.value as Policy));
-        row.appendChild(sel);
+      if (!advancedTargets.open) return;
+      tablistEl.innerHTML = "";
+      for (const t of tabs) {
+        if (typeof t.id !== "number") continue;
+        const id = t.id;
+        const isTarget = targets.includes(id);
+        const row = document.createElement("div");
+        row.className = "bl-tab" + (isTarget ? " is-target" : "");
 
-        const unpin = document.createElement("button");
-        unpin.className = "unpin-btn";
-        unpin.textContent = "取消";
-        unpin.addEventListener("click", async () => {
-          await setTargets((await getTargets()).filter((x) => x !== id));
-          renderTabs();
-        });
-        row.appendChild(unpin);
-      } else {
-        const pin = document.createElement("button");
-        pin.className = "pin-btn";
-        pin.textContent = "设为目标";
-        pin.addEventListener("click", async () => {
-          const cur = await getTargets();
-          if (!cur.includes(id)) cur.push(id);
-          await setTargets(cur);
-          renderTabs();
-        });
-        row.appendChild(pin);
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const title = document.createElement("div");
+        title.className = "t";
+        title.textContent = t.title || "(无标题)";
+        const url = document.createElement("div");
+        url.className = "u";
+        try {
+          url.textContent = t.url ? new URL(t.url).host || t.url : "";
+        } catch {
+          url.textContent = t.url || "";
+        }
+        meta.appendChild(title);
+        meta.appendChild(url);
+        row.appendChild(meta);
+
+        if (isTarget) {
+          // 每个目标各自的新标签策略
+          const sel = document.createElement("select");
+          sel.innerHTML =
+            '<option value="stay">不跟随</option><option value="follow">跟随新标签</option>';
+          sel.value = policies[String(id)] ?? fallback;
+          sel.title = "该目标页打开新标签时的处理";
+          sel.addEventListener("change", () => setTabPolicy(id, sel.value as Policy));
+          row.appendChild(sel);
+
+          const unpin = document.createElement("button");
+          unpin.className = "unpin-btn";
+          unpin.textContent = "取消";
+          unpin.addEventListener("click", async () => {
+            await setTargets((await getTargets()).filter((x) => x !== id));
+            renderTabs();
+          });
+          row.appendChild(unpin);
+        } else {
+          const pin = document.createElement("button");
+          pin.className = "pin-btn";
+          pin.textContent = "设为目标";
+          pin.addEventListener("click", async () => {
+            const cur = await getTargets();
+            if (!cur.includes(id)) cur.push(id);
+            await setTargets(cur);
+            renderTabs();
+          });
+          row.appendChild(pin);
+        }
+        tablistEl.appendChild(row);
       }
-      tablistEl.appendChild(row);
+    } finally {
+      renderingTabs = false;
     }
   }
 

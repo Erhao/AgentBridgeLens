@@ -17,6 +17,8 @@ independently and replies return only to the requesting bridge. Existing single
 server settings are preserved. All bridges share browser and target-tab state;
 use explicit `tabId` for coordinated work. See [multi-bridge setup](docs/USAGE.md#同一个-chrome-同时连接多个桥接服务).
 
+操作页面默认使用「操作当前页」，也可切换到「固定指定页」并选择一个标签页，避免切换浏览器标签时改变默认操作对象。完整标签页列表、多目标和新标签跟随策略收在默认折叠的「高级设置」中；已有多目标配置会保留。所有 Bridge 共用目标设置，AI 明确指定标签页时以指定页面为准。
+
 弹窗和侧边栏提供「显示实时操作状态」开关（默认开启，自动记住选择）。
 状态区显示正在执行的调用、实际目标页面及标签页 ID、Bridge 名称、数据类别
 （例如 DOM、网络、控制台、性能）和适用的元素/筛选范围；完成后显示最近一次结果与耗时。

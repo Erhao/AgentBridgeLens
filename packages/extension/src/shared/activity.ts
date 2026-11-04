@@ -50,3 +50,9 @@ export function formatActivity(activity: Activity): string {
     activity.site, activity.scope, `工具：${activity.tool}`,
   ].filter(Boolean).join("\n");
 }
+
+export interface ActivitySnapshot {
+  active: Activity[];
+  last?: Activity;
+  revision?: number;
+}

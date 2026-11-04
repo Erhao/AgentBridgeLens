@@ -35,6 +35,19 @@ async function connect() {
 
 /** 截图：激活 tab 用 captureVisibleTab（快、无横幅）；后台 tab 用 CDP（可截后台）。 */
 async function screenshot(tabId: number, selector?: string): Promise<{ dataUrl: string }> {
+  const token = crypto.randomUUID();
+  const notify = (hide: boolean) => chrome.tabs.sendMessage(tabId, {
+    type: "bridgelens-activity-capture", token, hide,
+  }, { frameId: 0 }).catch(() => { /* restricted page or old content script */ });
+  await notify(true);
+  try {
+    return await captureScreenshot(tabId, selector);
+  } finally {
+    await notify(false);
+  }
+}
+
+async function captureScreenshot(tabId: number, selector?: string): Promise<{ dataUrl: string }> {
   const tab = await chrome.tabs.get(tabId);
   const full = tab.active
     ? await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" })
@@ -151,8 +164,27 @@ function requestConfirmation(message: string, options: string[], source: BridgeS
 
 const activeActivities = new Map<string, Activity>();
 let lastActivity: Activity | undefined;
+let activityRevision = Date.now();
+function activitySnapshot() {
+  return { active: [...activeActivities.values()], last: lastActivity, revision: activityRevision };
+}
 function publishActivities() {
-  broadcast({ type: "bridgelens-activities", active: [...activeActivities.values()], last: lastActivity });
+  activityRevision = Math.max(Date.now(), activityRevision + 1);
+  const revision = activityRevision;
+  // Clone now so in-flight query callbacks cannot mutate an older snapshot.
+  const message = structuredClone({ type: "bridgelens-activities", ...activitySnapshot() });
+  broadcast(message);
+  // Send to normal web pages too: the user can see background-target work
+  // on the page they are viewing, without opening an extension panel.
+  void chrome.tabs.query({ url: ["http://*/*", "https://*/*"] }).then((tabs) => {
+    if (revision !== activityRevision) return;
+    for (const tab of tabs) {
+      if (typeof tab.id !== "number") continue;
+      void chrome.tabs.sendMessage(tab.id, message, { frameId: 0 }).catch(() => {
+        /* restricted pages / content script not ready */
+      });
+    }
+  }).catch(() => {});
 }
 
 async function handleToolCall(request: BridgeRequest, source: BridgeSource): Promise<unknown> {
@@ -245,7 +277,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "bridgelens-get-activities") {
-    sendResponse({ active: [...activeActivities.values()], last: lastActivity });
+    sendResponse(activitySnapshot());
   } else if (message?.type === "bridgelens-get-status") {
     const bridges = connections.status();
     sendResponse({ connected: bridges.some((bridge) => bridge.connected), bridges });

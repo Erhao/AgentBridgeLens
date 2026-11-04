@@ -48,7 +48,8 @@ const STYLE = `
 const MARKUP = `
   <h1 class="bl-h1">AgentBridgeLens</h1>
   <div id="bl-status" class="status">检查连接中…</div>
-  <label class="bl-consent"><input id="bl-activity-enabled" type="checkbox" checked />显示实时操作状态</label>
+  <label class="bl-consent"><input id="bl-activity-enabled" type="checkbox" checked />面板内显示实时状态</label>
+  <label class="bl-consent"><input id="bl-toast-enabled" type="checkbox" checked />网页自动显示悬浮状态</label>
   <div id="bl-activity" class="status" role="status" aria-live="polite">等待 Agent 调用…</div>
   <details id="bl-privacy">
     <summary>数据访问与授权</summary>
@@ -145,6 +146,22 @@ export function mountControls(root: HTMLElement): void {
   const privacyDetails = root.querySelector<HTMLDetailsElement>("#bl-privacy")!;
   const consentInput = root.querySelector<HTMLInputElement>("#bl-consent")!;
   const applyConsentBtn = root.querySelector<HTMLButtonElement>("#bl-apply-consent")!;
+
+  const toastToggle = root.querySelector<HTMLInputElement>("#bl-toast-enabled")!;
+  toastToggle.addEventListener("change", () => {
+    void chrome.storage.local.set({ activityToastEnabled: toastToggle.checked });
+  });
+  let toastSettingRevision = 0;
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.activityToastEnabled) {
+      toastSettingRevision++;
+      toastToggle.checked = changes.activityToastEnabled.newValue !== false;
+    }
+  });
+  const initialToastRevision = toastSettingRevision;
+  void chrome.storage.local.get("activityToastEnabled").then(({ activityToastEnabled }) => {
+    if (toastSettingRevision === initialToastRevision) toastToggle.checked = activityToastEnabled !== false;
+  });
 
   const activityToggle = root.querySelector<HTMLInputElement>("#bl-activity-enabled")!;
   const activityEl = root.querySelector<HTMLDivElement>("#bl-activity")!;

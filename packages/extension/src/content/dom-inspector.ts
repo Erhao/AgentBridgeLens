@@ -32,6 +32,7 @@ function serializeNode(node: Element, depth: number, maxDepth: number): unknown 
 
   const children: unknown[] = [];
   for (const child of node.children) {
+    if (child.id === "bridgelens-activity-toast") continue;
     children.push(serializeNode(child, depth + 1, maxDepth));
   }
 

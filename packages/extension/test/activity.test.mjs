@@ -38,6 +38,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
   let handle;
   let resolveTab;
   const events = [];
+  const pageEvents = [];
   const listeners = [];
   const noopEvent = { addListener() {} };
   const dependencies = {
@@ -59,7 +60,14 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
       sendMessage: async (event) => { events.push(structuredClone(event)); },
       onMessage: { addListener(listener) { listeners.push(listener); } }, onInstalled: noopEvent,
     },
-    tabs: { get: async (id) => ({ id, title: "实际目标", url: "https://example.com/path?token=secret" }) },
+    tabs: {
+      query: async () => [{ id: 42 }, { id: 43 }],
+      sendMessage: async (id, message, options) => {
+        pageEvents.push({ id, message: structuredClone(message), options });
+        if (id === 43) throw new Error("No content script");
+      },
+      get: async (id) => ({ id, title: "实际目标", url: "https://example.com/path?token=secret" }),
+    },
     alarms: { create() {}, onAlarm: noopEvent },
   };
   try {
@@ -76,6 +84,8 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     assert.equal(latest.last.page, "实际目标");
     assert.equal(latest.last.site, "https://example.com");
     assert.equal(latest.last.state, "completed");
+    assert.ok(pageEvents.some((event) => event.id === 42 && event.message.last?.tabId === 42), "activity reaches web pages without opening a panel");
+    assert.ok(pageEvents.every((event) => event.options.frameId === 0), "only the top frame displays automatic prompts");
     let snapshot;
     listeners[0]({ type: "bridgelens-get-activities" }, {}, (result) => { snapshot = result; });
     assert.equal(snapshot.active.length, 1, "reopened panels can fetch current activity");

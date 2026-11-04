@@ -1,3 +1,4 @@
+import { startActivityToast } from "./activity-toast";
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { getPageInfo, getDomSnapshot, inspectElement, getElementRect } from "./dom-inspector";
 import { highlightElement, clearHighlights } from "./highlighter";
@@ -9,6 +10,7 @@ import { markElements, visualizeLayout, showResponsiveFrame, clearOverlays } fro
 import { startRecording, stopRecording, replayActions, type RecordedAction } from "./recorder";
 import { showHud, hideHud, updateHud } from "./hud";
 
+startActivityToast();
 startConsoleCapture();
 startNetworkCapture();
 startPerfCapture();

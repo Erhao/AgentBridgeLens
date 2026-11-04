@@ -20,19 +20,19 @@ function rel(): number {
 
 const onClick = (e: MouseEvent) => {
   const t = e.target as Element;
-  if (t && t.nodeType === 1) {
+  if (t && t.nodeType === 1 && t.id !== "bridgelens-activity-toast") {
     actions.push({ type: "click", selector: cssSelector(t), timestamp: rel() });
   }
 };
 const onInput = (e: Event) => {
   const t = e.target as HTMLInputElement;
-  if (t && t.nodeType === 1) {
+  if (t && t.nodeType === 1 && t.id !== "bridgelens-activity-toast") {
     actions.push({ type: "input", selector: cssSelector(t), value: t.value, timestamp: rel() });
   }
 };
 const onChange = (e: Event) => {
   const t = e.target as HTMLInputElement;
-  if (t && t.nodeType === 1) {
+  if (t && t.nodeType === 1 && t.id !== "bridgelens-activity-toast") {
     actions.push({ type: "change", selector: cssSelector(t), value: t.value, timestamp: rel() });
   }
 };

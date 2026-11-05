@@ -39,7 +39,7 @@ Squash 合并时，最终提交标题和正文必须保留这些信息。
 无需 npm、GitLab 或额外 PAT。仓库策略须允许 Actions 写入内容及创建发布标签。
 CI 不向 issue 或 PR 发送发布通知。
 
-更新工具的核心测试额外在 Linux、Windows、macOS 三个平台运行，均通过后才允许发布。
+更新工具的核心测试（包括 HTTP/SOCKS5 代理、HTTPS CONNECT 与发布附件重定向）额外在 Linux、Windows、macOS 三个平台运行，均通过后才允许发布。
 
 PR 只校验和上传普通构建制品；推送 `main` 或在 `main` 上手动运行 workflow 才发布。
 没有需发布的提交时不创建新版本。正式安装包及校验文件长期保存在 Releases；

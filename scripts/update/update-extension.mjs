@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Standalone updater: Node.js 20+; no npm installation required.
+// Standalone updater: Node.js 20+ and system curl; no npm installation required.
 import { createHash } from "node:crypto";
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile, rename, rm, lstat, open, realpath } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rename, rm, lstat, open, realpath, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve, join, dirname, parse } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -165,6 +167,113 @@ export async function rollback(target) {
   await rm(temporary, { recursive: true, force: true }).catch(() => {});
 }
 
+export function normalizeProxy(value) {
+  let input = String(value).trim();
+  if (/^\d+$/.test(input)) input = `http://127.0.0.1:${input}`;
+  else if (!input.includes("://")) input = `http://${input}`;
+  try {
+    const proxy = new URL(input);
+    if (!['http:', 'https:', 'socks5:', 'socks5h:'].includes(proxy.protocol) || !proxy.hostname ||
+        proxy.search || proxy.hash || (proxy.pathname && proxy.pathname !== "/") || /[\r\n]/.test(input)) throw new Error();
+    decodeURIComponent(proxy.username);
+    decodeURIComponent(proxy.password);
+    return proxy.toString();
+  } catch { throw new Error("代理地址无效，请填写 http://127.0.0.1:端口 或 socks5h://127.0.0.1:端口"); }
+}
+
+function proxyLabel(proxy) {
+  if (!proxy) return "直连";
+  const url = new URL(proxy);
+  return `${url.protocol}//${url.host}`;
+}
+
+export function parseMacProxy(text) {
+  const values = {};
+  for (const line of text.split("\n")) {
+    const match = line.match(/^\s*(HTTPSEnable|HTTPSProxy|HTTPSPort|HTTPEnable|HTTPProxy|HTTPPort|SOCKSEnable|SOCKSProxy|SOCKSPort)\s*:\s*(.*?)\s*$/);
+    if (match) values[match[1]] = match[2];
+  }
+  for (const [name, scheme] of [["HTTPS", "http"], ["HTTP", "http"], ["SOCKS", "socks5h"]]) {
+    const host = values[`${name}Proxy`], port = values[`${name}Port`];
+    if (values[`${name}Enable`] === "1" && host && /^\d+$/.test(port ?? "")) {
+      return normalizeProxy(`${scheme}://${host.includes(":") && !host.startsWith("[") ? `[${host}]` : host}:${port}`);
+    }
+  }
+}
+
+export async function chooseProxy(options, saved = {}, { env = process.env, platform = process.platform, systemProxy } = {}) {
+  if (options.noProxy) return { proxy: "", source: "命令行直连" };
+  if (options.proxy) return { proxy: normalizeProxy(options.proxy), source: "命令行代理" };
+  for (const key of ["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY"]) {
+    if (env[key]?.trim()) return { proxy: normalizeProxy(env[key]), source: `环境变量 ${key}` };
+  }
+  if (saved.proxy) return { proxy: normalizeProxy(saved.proxy), source: "已保存的代理" };
+  if (platform === "darwin") {
+    try {
+      const text = systemProxy === undefined
+        ? (await promisify(execFile)("/usr/sbin/scutil", ["--proxy"], { timeout: 3000, maxBuffer: 65536 })).stdout
+        : systemProxy;
+      const proxy = parseMacProxy(text);
+      if (proxy) return { proxy, source: "macOS 系统代理" };
+    } catch { /* PAC-only and unavailable system settings need a manual proxy. */ }
+  }
+  return { proxy: "", source: "未配置代理" };
+}
+
+/** curl provides HTTP CONNECT, SOCKS and certificate verification on Node 20+. */
+export function createNetworkFetch(proxy = "", { env = process.env, executable = process.platform === "win32" ? "curl.exe" : "curl", retries = 2, caFile } = {}) {
+  return async (url, { signal, headers = {} } = {}) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const data = await new Promise((done, reject) => {
+          const args = ["--disable", "--silent", "--show-error", "--fail", "--location", "--max-redirs", "8",
+            "--connect-timeout", "15", "--max-time", "60", "--proto", "=http,https", "--proto-redir", "=http,https",
+            "--proxy", proxy];
+          if (!proxy) args.push("--noproxy", "*");
+          if (caFile) args.push("--cacert", caFile);
+          for (const [key, value] of Object.entries(headers)) args.push("--header", `${key}: ${value}`);
+          args.push("--url", String(url));
+          const child = spawn(executable, args, { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+          const chunks = [];
+          let size = 0, stderr = "", stopped = false;
+          const stop = (error) => { if (!stopped) { stopped = true; child.kill(); reject(error); } };
+          const abort = () => stop(new Error("下载超时或已取消，请检查代理及网络后重试"));
+          signal?.addEventListener("abort", abort, { once: true });
+          if (signal?.aborted) abort();
+          child.stdout.on("data", (chunk) => {
+            size += chunk.length;
+            if (size > LIMIT) stop(new Error("下载文件超过大小限制"));
+            else chunks.push(chunk);
+          });
+          child.stderr.on("data", (chunk) => { stderr = (stderr + chunk.toString()).slice(-2048); });
+          child.on("error", (error) => stop(new Error(error.code === "ENOENT"
+            ? "未找到 curl。macOS 通常自带；Windows 请使用系统 curl.exe；Linux 请安装 curl 后重试"
+            : "无法启动下载程序，请检查 curl 是否可用")));
+          child.on("close", (code) => {
+            signal?.removeEventListener("abort", abort);
+            if (stopped) return;
+            if (code === 0) { done(Buffer.concat(chunks)); return; }
+            let detail = stderr.trim().replaceAll(proxy || "\0", proxyLabel(proxy));
+            if (proxy) {
+              const parsed = new URL(proxy);
+              for (const secret of [parsed.username, parsed.password, decodeURIComponent(parsed.username), decodeURIComponent(parsed.password)]) {
+                if (secret) detail = detail.replaceAll(secret, "***");
+              }
+            }
+            const error = new Error(`GitHub 下载失败（${proxyLabel(proxy)}）：${detail || `curl 退出码 ${code}`}。请确认代理软件已启动、端口正确；可用 --proxy 指定，或 --no-proxy 临时直连。`);
+            error.retryable = [5, 6, 7, 18, 28, 35, 52, 55, 56].includes(code);
+            reject(error);
+          });
+        });
+        return new Response(data);
+      } catch (error) {
+        if (!error.retryable || attempt >= retries || signal?.aborted) throw error;
+        await new Promise((done) => setTimeout(done, 500 * (attempt + 1)));
+      }
+    }
+  };
+}
+
 async function download(url, limit, fetchImpl) {
   const response = await fetchImpl(url, { signal: AbortSignal.timeout(60000), headers: { "User-Agent": "AgentBridgeLens-Updater", Accept: "application/vnd.github+json" } });
   if (!response.ok) throw new Error(`下载失败：HTTP ${response.status}，请检查网络或稍后重试`);
@@ -222,26 +331,28 @@ export function parseArgs(args) {
   const options = { rollback: false, check: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--dir" && args[i + 1] && !args[i + 1].startsWith("--")) options.directory = expandPath(args[++i]);
+    else if (args[i] === "--proxy" && args[i + 1] && !args[i + 1].startsWith("--")) options.proxy = normalizeProxy(args[++i]);
+    else if (args[i] === "--no-proxy") options.noProxy = true;
     else if (args[i] === "--rollback") options.rollback = true;
     else if (args[i] === "--check") options.check = true;
     else if (args[i] === "--help" || args[i] === "-h") options.help = true;
     else throw new Error(`不认识的参数：${args[i]}，请使用 --help 查看用法`);
   }
+  if (options.proxy && options.noProxy) throw new Error("--proxy 和 --no-proxy 不能同时使用");
   if (options.rollback && options.check) throw new Error("--rollback 和 --check 不能同时使用");
   return options;
 }
 
-export async function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2), { preferenceFile = preferences, networkFetch = createNetworkFetch } = {}) {
   const options = parseArgs(args);
   if (options.help) {
-    console.log("用法：node update-extension.mjs [--dir 原扩展目录] [--check | --rollback]\n首次运行可选择原安装目录；以后自动记住。--check 仅检查版本，--rollback 恢复上一版。\n请不要删除或重新导入 Chrome 中的原插件，更新后只点「重新加载」。");
+    console.log("用法：node update-extension.mjs [--dir 原扩展目录] [--check | --rollback] [--proxy 地址 | --no-proxy]\n代理支持 HTTP/HTTPS/SOCKS5；自动读取代理环境变量及 macOS 系统代理。--proxy 成功后会记住。\n首次运行可选择原安装目录；以后自动记住。--check 仅检查版本，--rollback 恢复上一版。\n请不要删除或重新导入 Chrome 中的原插件，更新后只点「重新加载」。");
     return;
   }
   if (Number(process.versions.node.split(".")[0]) < 20) throw new Error("需要 Node.js 20 或更高版本");
-  let target = options.directory;
-  if (!target) {
-    try { target = JSON.parse(await readFile(preferences, "utf8")).directory; } catch { /* first run */ }
-  }
+  let saved = {};
+  try { saved = JSON.parse(await readFile(preferenceFile, "utf8")); } catch { /* first run */ }
+  let target = options.directory || saved.directory;
   if (!target) {
     if (!process.stdin.isTTY) throw new Error("首次运行请通过 --dir 指定原扩展目录，避免更换目录导致配置丢失");
     const prompt = createInterface({ input: process.stdin, output: process.stdout });
@@ -270,15 +381,33 @@ export async function main(args = process.argv.slice(2)) {
       await rollback(target);
       console.log("已恢复上一版。请在 chrome://extensions 点击原插件的「重新加载」。");
     } else {
-      const result = await update(target, { check: options.check });
+      const network = await chooseProxy(options, saved);
+      console.log(`网络：${network.source} · ${proxyLabel(network.proxy)}`);
+      let result;
+      try {
+        result = await update(target, { check: options.check, fetchImpl: networkFetch(network.proxy) });
+      } catch (error) {
+        // Finder-launched terminals may have neither environment variables nor a
+        // manual system proxy (for example, when the proxy client uses only PAC).
+        if (!process.stdin.isTTY || options.noProxy || !error.message.startsWith("GitHub 下载失败")) throw error;
+        console.error(error.message);
+        const prompt = createInterface({ input: process.stdin, output: process.stdout });
+        let answer;
+        try { answer = (await prompt.question("请输入代理地址或端口（如 http://127.0.0.1:7897；回车取消）：")).trim(); }
+        finally { prompt.close(); }
+        if (!answer) throw error;
+        options.proxy = normalizeProxy(answer);
+        result = await update(target, { check: options.check, fetchImpl: networkFetch(options.proxy) });
+      }
       if (options.check) console.log("仅检查版本，未修改扩展文件。");
       else if (!result.changed) console.log("本地已是最新版或更高版本，无需更新。");
       else if (result.firstInstall) console.log(`安装完成。在 chrome://extensions 开启开发者模式，首次加载此固定目录：\n${target}`);
       else console.log("更新完成，已保留上一版备份。请在 chrome://extensions 点击原插件的「重新加载」，然后刷新需要操作的网页。无需重新导入或填写桥接配置。");
     }
-    if (!options.check) {
-      await mkdir(dirname(preferences), { recursive: true });
-      await writeFile(preferences, JSON.stringify({ directory: target }, null, 2));
+    if (!options.check || options.proxy) {
+      await mkdir(dirname(preferenceFile), { recursive: true });
+      await writeFile(preferenceFile, JSON.stringify({ ...saved, directory: target, ...(options.proxy ? { proxy: options.proxy } : {}) }, null, 2), { mode: 0o600 });
+      if (process.platform !== "win32") await chmod(preferenceFile, 0o600);
     }
   } finally {
     await lock.close();

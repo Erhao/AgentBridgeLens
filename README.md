@@ -50,7 +50,7 @@ ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node packages/extension/test
 ### 已安装用户：固定目录一键更新
 
 从 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 下载一次
-`agentbridgelens-updater.zip` 并保留解压后的工具目录。需要 Node.js 20+，无需安装 npm 依赖。
+`agentbridgelens-updater.zip` 并保留解压后的工具目录。需要 Node.js 20+ 和系统 curl，无需安装 npm 依赖。
 Windows 双击 `update-extension.cmd`，macOS 运行 `update-extension.command`，Linux 运行 `sh update-extension.sh`。
 首次填写 Chrome 扩展详情中显示的**原加载目录**；以后会记住目录，自动下载最新正式版、校验 SHA256、替换扩展文件并保留上一版。
 完成后只需在 `chrome://extensions` 点原插件的「重新加载」，然后刷新需要操作的网页。
@@ -61,6 +61,15 @@ Windows 双击 `update-extension.cmd`，macOS 运行 `update-extension.command`�
 node update-extension.mjs --dir "原扩展目录"  # 第一次指定，之后可省略
 node update-extension.mjs --check            # 仅检查版本
 node update-extension.mjs --rollback         # 恢复上一版，仍使用原目录
+```
+
+需要代理时，工具会读取 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`（含小写变量），macOS 双击启动还会识别系统手动代理。
+也可运行下面的命令指定代理，成功后会记住地址，之后直接双击即可。请将端口替换为代理软件的实际端口；仅启用 PAC 时请手动指定。
+
+```bash
+sh update-extension.command --proxy http://127.0.0.1:7897
+# 或：node update-extension.mjs --proxy socks5h://127.0.0.1:1080
+# 临时直连：node update-extension.mjs --no-proxy
 ```
 
 完整说明见更新工具中的 `README.txt`。此方式保留本机 Chrome 配置，不承担重装或换电脑时的配置迁移。

@@ -4,7 +4,7 @@ import { formatActivity, type Activity } from "./activity";
  * mountControls(root) 注入样式 + 构建 DOM + 接好全部逻辑。
  * 目标是一组（可固定多个）；每个固定目标行上单独设「新标签策略」。
  */
-import { getBridgeProfiles, setBridgeProfiles, DEFAULT_HOST, DEFAULT_PORT, type BridgeProfile } from "./config";
+import { getBridgeProfiles, setBridgeProfiles, DEFAULT_HOST, DEFAULT_PORT, withBridgeColors, BRIDGE_COLORS, toastSeconds, type BridgeProfile } from "./config";
 
 type Policy = "stay" | "follow";
 
@@ -23,6 +23,8 @@ const STYLE = `
   .bl select { max-width: 100%; padding: 5px; margin: 4px 0; }
   .bl .bl-service-actions { display: flex; gap: 8px; margin-bottom: 8px; }
   .bl input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 3px; border: 1px solid #cbd2d9; border-radius: 5px; font-size: 13px; }
+  .bl input[type="color"] { width:52px; height:30px; padding:2px; vertical-align:middle; }
+  .bl #bl-toast-seconds { width:70px; margin-left:6px; }
   #bl-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
   #bl-save:hover { background: #3a7bc0; }
   .bl .bl-privacy { font-size: 12px; line-height: 1.5; background: #eef4fb; padding: 8px; border-radius: 6px; margin-bottom: 10px; }
@@ -55,6 +57,7 @@ const MARKUP = `
   <div id="bl-status" class="status">检查连接中…</div>
   <label class="bl-consent"><input id="bl-activity-enabled" type="checkbox" checked />面板内显示实时状态</label>
   <label class="bl-consent"><input id="bl-toast-enabled" type="checkbox" checked />网页自动显示悬浮状态</label>
+  <label>完成后保留（秒）<input id="bl-toast-seconds" type="number" min="0" max="300" step="0.1" value="2" title="0～300 秒；执行中的动作会持续显示" /></label>
   <div id="bl-activity" class="status" role="status" aria-live="polite">等待 Agent 调用…</div>
   <details id="bl-privacy">
     <summary>数据访问与授权</summary>
@@ -70,6 +73,7 @@ const MARKUP = `
     <label>选择服务 <select id="bl-service"></select></label>
     <div class="bl-service-actions"><button id="bl-add" type="button">添加服务</button><button id="bl-delete" type="button">删除服务</button></div>
     <label>服务名称 <input id="bl-name" type="text" placeholder="例如：开发机 / 笔记本" /></label>
+    <label>服务强调色 <input id="bl-color" type="color" value="#60a5fa" /></label>
     <label class="bl-consent"><input id="bl-enabled" type="checkbox" />启用此服务</label>
     <label>Host <input id="bl-host" type="text" placeholder="127.0.0.1" /></label>
     <label>Port <input id="bl-port" type="number" min="1" max="65535" placeholder="19222" /></label>
@@ -131,6 +135,7 @@ export function mountControls(root: HTMLElement): void {
 
   const serviceSelect = root.querySelector<HTMLSelectElement>("#bl-service")!;
   const nameInput = root.querySelector<HTMLInputElement>("#bl-name")!;
+  const colorInput = root.querySelector<HTMLInputElement>("#bl-color")!;
   const enabledInput = root.querySelector<HTMLInputElement>("#bl-enabled")!;
   const addBtn = root.querySelector<HTMLButtonElement>("#bl-add")!;
   const deleteBtn = root.querySelector<HTMLButtonElement>("#bl-delete")!;
@@ -151,6 +156,24 @@ export function mountControls(root: HTMLElement): void {
   const privacyDetails = root.querySelector<HTMLDetailsElement>("#bl-privacy")!;
   const consentInput = root.querySelector<HTMLInputElement>("#bl-consent")!;
   const applyConsentBtn = root.querySelector<HTMLButtonElement>("#bl-apply-consent")!;
+
+  const durationInput = root.querySelector<HTMLInputElement>("#bl-toast-seconds")!;
+  let durationRevision = 0;
+  durationInput.addEventListener("change", () => {
+    if (!durationInput.value || !durationInput.reportValidity()) return;
+    durationRevision++;
+    void chrome.storage.local.set({ activityToastSeconds: Number(durationInput.value) });
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.activityToastSeconds) {
+      durationRevision++;
+      durationInput.value = String(toastSeconds(changes.activityToastSeconds.newValue));
+    }
+  });
+  const initialDurationRevision = durationRevision;
+  void chrome.storage.local.get("activityToastSeconds").then(({ activityToastSeconds }) => {
+    if (durationRevision === initialDurationRevision) durationInput.value = String(toastSeconds(activityToastSeconds));
+  });
 
   const toastToggle = root.querySelector<HTMLInputElement>("#bl-toast-enabled")!;
   toastToggle.addEventListener("change", () => {
@@ -219,7 +242,7 @@ export function mountControls(root: HTMLElement): void {
         statusEl.className = "status";
         return;
       }
-      const bridges = res.bridges as { id: string; name: string; url: string; connected: boolean }[] | undefined;
+      const bridges = res.bridges as { id: string; name: string; url: string; connected: boolean; color?: string }[] | undefined;
       statusEl.replaceChildren();
       statusEl.className = "status";
       if (!bridges?.length) {
@@ -230,6 +253,7 @@ export function mountControls(root: HTMLElement): void {
       for (const bridge of bridges) {
         const row = document.createElement("div");
         row.className = `bl-bridge-line ${bridge.connected ? "ok" : "bad"}`;
+        row.style.borderLeft = `4px solid ${bridge.color ?? BRIDGE_COLORS[0]}`;
         row.textContent = `${bridge.connected ? "已连接" : "未连接"} · ${bridge.name} · ${bridge.url}`;
         statusEl.appendChild(row);
       }
@@ -253,6 +277,7 @@ export function mountControls(root: HTMLElement): void {
     const profile = profiles.find((p) => p.id === selectedId);
     serviceSelect.value = selectedId;
     nameInput.value = profile?.name ?? "";
+    colorInput.value = profile?.color ?? BRIDGE_COLORS[0];
     hostInput.value = profile?.host ?? DEFAULT_HOST;
     portInput.value = String(profile?.port ?? DEFAULT_PORT);
     tokenInput.value = profile?.token ?? "";
@@ -276,7 +301,7 @@ export function mountControls(root: HTMLElement): void {
   });
   addBtn.addEventListener("click", () => {
     selectedId = crypto.randomUUID();
-    profiles.push({ id: selectedId, name: `服务 ${profiles.length + 1}`, host: DEFAULT_HOST, port: DEFAULT_PORT, token: "", enabled: true });
+    profiles = withBridgeColors([...profiles, { id: selectedId, name: `服务 ${profiles.length + 1}`, host: DEFAULT_HOST, port: DEFAULT_PORT, token: "", enabled: true }]);
     renderEditor();
   });
   deleteBtn.addEventListener("click", async () => {
@@ -302,7 +327,7 @@ export function mountControls(root: HTMLElement): void {
       id: selectedId, name: nameInput.value.trim() || "未命名服务",
       host: hostInput.value.trim() || DEFAULT_HOST,
       port: Number(portInput.value || DEFAULT_PORT), token: tokenInput.value.trim(),
-      enabled: enabledInput.checked,
+      enabled: enabledInput.checked, color: colorInput.value,
     };
     try {
       const saved = await getBridgeProfiles();

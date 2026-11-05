@@ -24,8 +24,8 @@ class Socket {
   receive(request) { return this.onmessage({ data: JSON.stringify(request) }); }
 }
 const profiles = [
-  { id: "a", name: "Server A", host: "localhost", port: 19222, token: "a secret", enabled: true },
-  { id: "b", name: "Server B", host: "192.168.1.2", port: 19222, token: "b", enabled: true },
+  { id: "a", name: "Server A", host: "localhost", port: 19222, token: "a secret", enabled: true, color: "#60a5fa" },
+  { id: "b", name: "Server B", host: "192.168.1.2", port: 19222, token: "b", enabled: true, color: "#c084fc" },
 ];
 
 test("multiple bridges route identical IDs, errors and out-of-order results to their own sockets", async (t) => {
@@ -109,7 +109,7 @@ test("legacy config migration, empty list persistence and validation", async () 
   } } };
   try {
     assert.deepEqual(await config.getBridgeProfiles(), [{
-      id: "default", name: "默认服务", host: "10.0.0.8", port: 23456, token: "legacy", enabled: true,
+      id: "default", name: "默认服务", host: "10.0.0.8", port: 23456, token: "legacy", enabled: true, color: "#60a5fa",
     }]);
     await config.setBridgeProfiles(profiles);
     assert.deepEqual(await config.getBridgeProfiles(), profiles);
@@ -119,4 +119,39 @@ test("legacy config migration, empty list persistence and validation", async () 
     await config.setBridgeProfiles([]);
     assert.deepEqual(await config.getBridgeProfiles(), []);
   } finally { globalThis.chrome = previous; }
+});
+
+test("color and display-name changes preserve sockets and in-flight requests", async (t) => {
+  const previous = globalThis.WebSocket;
+  globalThis.WebSocket = Socket; Socket.instances = [];
+  let finish;
+  const sources = [];
+  const manager = new BridgeConnections((_request, source) => {
+    sources.push(source);
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  t.after(() => { manager.update([], false); globalThis.WebSocket = previous; });
+  manager.update(profiles, true);
+  const first = Socket.instances[0];
+  const pending = first.receive({ id: "running", tool: "get_page_info", params: {} });
+  manager.update([{ ...profiles[0], color: "#ff8800", name: "Renamed" }, profiles[1]], true);
+  assert.equal(Socket.instances.length, 2);
+  assert.equal(sources[0].signal.aborted, false);
+  finish("done"); await pending;
+  const next = first.receive({ id: "next", tool: "get_page_info", params: {} });
+  assert.equal(sources[1].name, "Renamed");
+  finish("done"); await next;
+});
+
+test("automatic accents are distinct, stable on reorder, and reject unsafe colors", async () => {
+  const raw = Array.from({ length: 16 }, (_, i) => ({ ...profiles[0], id: String(i), host: `host-${i}`, color: undefined }));
+  const colored = config.withBridgeColors(raw);
+  assert.equal(new Set(colored.map((profile) => profile.color)).size, raw.length);
+  assert.deepEqual(config.withBridgeColors([...colored].reverse()), [...colored].reverse());
+  assert.equal(config.withBridgeColors([{ ...raw[0], color: "#AA11BB" }])[0].color, "#aa11bb");
+  assert.equal(config.isBridgeColor("red;display:none"), false);
+  assert.equal(config.toastSeconds(undefined), 2);
+  for (const value of [null, -1, Infinity, NaN, "3", 301]) assert.equal(config.toastSeconds(value), 2);
+  for (const value of [0, 0.1, 7, 300]) assert.equal(config.toastSeconds(value), value);
+  await assert.rejects(config.setBridgeProfiles([{ ...profiles[0], color: "invalid" }]), /强调色/);
 });

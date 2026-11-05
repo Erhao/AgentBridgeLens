@@ -4,7 +4,7 @@ import type {
   ContentResponse,
 } from "../shared/protocol";
 import { describeActivity, type Activity } from "../shared/activity";
-import { getBridgeProfiles } from "../shared/config";
+import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
 import { BridgeConnections, type BridgeSource } from "./bridge-connections";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 import {
@@ -25,12 +25,20 @@ import {
 
 const connections = new BridgeConnections(handleToolCall);
 let configRevision = 0;
+let bridgeColors = new Map<string, string>();
 async function connect() {
   const revision = ++configRevision;
   const [profiles, { bridgeConsent }] = await Promise.all([
     getBridgeProfiles(), chrome.storage.local.get("bridgeConsent"),
   ]);
-  if (revision === configRevision) connections.update(profiles, bridgeConsent === true);
+  if (revision === configRevision) {
+    bridgeColors = new Map(profiles.map((profile) => [profile.id, profile.color ?? BRIDGE_COLORS[0]]));
+    connections.update(profiles, bridgeConsent === true);
+    for (const activity of [...activeActivities.values(), ...recentActivities]) {
+      if (activity.bridgeId && bridgeColors.has(activity.bridgeId)) activity.bridgeColor = bridgeColors.get(activity.bridgeId);
+    }
+    publishActivities();
+  }
 }
 
 /** 截图：激活 tab 用 captureVisibleTab（快、无横幅）；后台 tab 用 CDP（可截后台）。 */
@@ -164,9 +172,13 @@ function requestConfirmation(message: string, options: string[], source: BridgeS
 
 const activeActivities = new Map<string, Activity>();
 let lastActivity: Activity | undefined;
+let activitySequence = 0;
+const recentActivities: Activity[] = [];
 let activityRevision = Date.now();
 function activitySnapshot() {
-  return { active: [...activeActivities.values()], last: lastActivity, revision: activityRevision };
+  // Keep completion metadata for the maximum configurable delay; bound bursts.
+  while (recentActivities.length && (recentActivities.length > 100 || (recentActivities[0].finishedAt ?? 0) < Date.now() - 300000)) recentActivities.shift();
+  return { active: [...activeActivities.values()], last: lastActivity, recent: [...recentActivities], revision: activityRevision };
 }
 function publishActivities() {
   activityRevision = Math.max(Date.now(), activityRevision + 1);
@@ -190,7 +202,8 @@ function publishActivities() {
 async function handleToolCall(request: BridgeRequest, source: BridgeSource): Promise<unknown> {
   const activity: Activity = {
     id: crypto.randomUUID(), tool: request.tool, ...describeActivity(request.tool, request.params),
-    bridgeName: source.name, state: "running", startedAt: Date.now(),
+    bridgeName: source.name, bridgeId: source.id, bridgeColor: bridgeColors.get(source.id) ?? BRIDGE_COLORS[0],
+    sequence: ++activitySequence, state: "running", startedAt: Date.now(),
   };
   activeActivities.set(activity.id, activity);
   publishActivities();
@@ -205,6 +218,7 @@ async function handleToolCall(request: BridgeRequest, source: BridgeSource): Pro
     activity.finishedAt = Date.now();
     activeActivities.delete(activity.id);
     lastActivity = activity;
+    recentActivities.push(activity);
     publishActivities();
   }
 }
@@ -279,7 +293,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "bridgelens-get-activities") {
     sendResponse(activitySnapshot());
   } else if (message?.type === "bridgelens-get-status") {
-    const bridges = connections.status();
+    const bridges = connections.status().map((bridge) => ({ ...bridge, color: bridgeColors.get(bridge.id) ?? BRIDGE_COLORS[0] }));
     sendResponse({ connected: bridges.some((bridge) => bridge.connected), bridges });
   } else if (message?.type === "bridgelens-confirm-result") {
     const fn = pendingConfirms.get(message.cid);

@@ -10,7 +10,7 @@ async function moduleFrom(source) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 }
 const activitySource = await readFile(new URL("../src/shared/activity.ts", import.meta.url), "utf8");
-const { describeActivity, formatActivity } = await moduleFrom(activitySource);
+const { describeActivity, formatActivity, visibleActivities } = await moduleFrom(activitySource);
 
 test("activity describes data dimensions and filters without copying payloads", () => {
   assert.deepEqual(describeActivity("inspect_element", { selector: "#submit" }), {
@@ -43,6 +43,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
   const noopEvent = { addListener() {} };
   const dependencies = {
     describeActivity,
+    BRIDGE_COLORS: ["#60a5fa"],
     BridgeConnections: class {
       constructor(callback) { handle = callback; }
       update() {}
@@ -89,14 +90,31 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     let snapshot;
     listeners[0]({ type: "bridgelens-get-activities" }, {}, (result) => { snapshot = result; });
     assert.equal(snapshot.active.length, 1, "reopened panels can fetch current activity");
+    assert.equal(snapshot.recent.length, 1, "completed cards remain alongside running cards");
     resolveTab([]);
     await pending;
     assert.equal(events.at(-1).active.length, 0);
     await assert.rejects(handle({ tool: "get_cdp_network", params: { tabId: -1 } }, bridge), /No target/);
     assert.equal(events.at(-1).last.state, "failed");
+    assert.equal(events.at(-1).recent.length, 3, "snapshots preserve rapid completions instead of replacing the previous card");
     assert.equal(events.at(-1).active.length, 0);
   } finally {
     globalThis.chrome = originalChrome;
     delete globalThis.__activityDependencies;
   }
+});
+
+test("toast cards are deduplicated, independently expire and stay in creation order", () => {
+  const base = { tool: "get_page_info", dimension: "页面信息", scope: "", bridgeName: "服务", state: "completed" };
+  const first = { ...base, id: "a", startedAt: 1000, finishedAt: 2000, sequence: 1 };
+  const second = { ...base, id: "b", startedAt: 1000, finishedAt: 1500, sequence: 2 };
+  const running = { ...base, id: "c", startedAt: 1200, state: "running" };
+  const snapshot = { recent: [second, first], last: first, active: [running] };
+  assert.deepEqual(visibleActivities(snapshot, 2, 2500).map((item) => item.id), ["a", "b", "c"]);
+  assert.deepEqual(visibleActivities(snapshot, 2, 3500).map((item) => item.id), ["a", "c"]);
+  assert.deepEqual(visibleActivities(snapshot, 2, 4000).map((item) => item.id), ["c"]);
+  assert.deepEqual(visibleActivities(snapshot, 0, 2500).map((item) => item.id), ["c"]);
+  assert.deepEqual(visibleActivities(snapshot, 5, 5000).map((item) => item.id), ["a", "b", "c"]);
+  const duplicate = { ...first, state: "running", finishedAt: undefined };
+  assert.equal(visibleActivities({ recent: [first], active: [duplicate] }, 2, 9000)[0].state, "running");
 });

@@ -25,7 +25,7 @@ export class BridgeConnections {
     const desired = new Map(profiles.filter((p) => consent && p.enabled).map((p) => [p.id, p]));
     for (const [id, connection] of this.connections) {
       const profile = desired.get(id);
-      if (!profile || JSON.stringify(profile) !== JSON.stringify(connection.profile)) {
+      if (!profile || profile.host !== connection.profile.host || profile.port !== connection.profile.port || profile.token !== connection.profile.token) {
         this.connections.delete(id);
         clearTimeout(connection.retry);
         connection.controller?.abort();
@@ -33,6 +33,9 @@ export class BridgeConnections {
           connection.socket.onclose = null;
           connection.socket.close();
         }
+      } else {
+        // Presentation changes must not interrupt a socket or in-flight calls.
+        connection.profile = profile;
       }
     }
     for (const [id, profile] of desired) {
@@ -67,7 +70,6 @@ export class BridgeConnections {
     connection.socket = socket;
     const controller = new AbortController();
     connection.controller = controller;
-    const source = { id: profile.id, name: profile.name, url, signal: controller.signal };
     socket.onmessage = async (event) => {
       let request: BridgeRequest;
       try {
@@ -80,7 +82,7 @@ export class BridgeConnections {
       if (controller.signal.aborted) return;
       let response: BridgeResponse;
       try {
-        response = { id: request.id, result: await this.handle(request, source) };
+        response = { id: request.id, result: await this.handle(request, { id: connection.profile.id, name: connection.profile.name, url, signal: controller.signal }) };
       } catch (error) {
         response = { id: request.id, error: { message: error instanceof Error ? error.message : String(error) } };
       }

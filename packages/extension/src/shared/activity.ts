@@ -5,6 +5,9 @@ export interface Activity {
   dimension: string;
   scope: string;
   bridgeName: string;
+  bridgeId?: string;
+  bridgeColor?: string;
+  sequence?: number;
   tabId?: number;
   page?: string;
   site?: string;
@@ -54,5 +57,15 @@ export function formatActivity(activity: Activity): string {
 export interface ActivitySnapshot {
   active: Activity[];
   last?: Activity;
+  recent?: Activity[];
   revision?: number;
+}
+
+/** One card per call, ordered by creation, with independent completion deadlines. */
+export function visibleActivities(snapshot: ActivitySnapshot, seconds: number, now = Date.now()): Activity[] {
+  const unique = new Map<string, Activity>();
+  for (const activity of [...(snapshot.recent ?? []), ...(snapshot.last ? [snapshot.last] : []), ...snapshot.active]) unique.set(activity.id, activity);
+  return [...unique.values()].filter((activity) => activity.state === "running" ||
+    (activity.finishedAt !== undefined && activity.finishedAt + seconds * 1000 > now))
+    .sort((a, b) => a.startedAt - b.startedAt || (a.sequence ?? 0) - (b.sequence ?? 0));
 }

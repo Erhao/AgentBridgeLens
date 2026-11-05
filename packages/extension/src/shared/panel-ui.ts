@@ -13,6 +13,11 @@ const STYLE = `
   .status { font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 12px; background: #f0f2f5; white-space: pre-line; overflow-wrap: anywhere; }
   .status.ok { background: #e3f9e5; color: #207227; }
   .status.bad { background: #fff0f0; color: #ab1c1c; }
+  .status.bl-bridges { background: transparent; padding: 0; }
+  .bl-bridge-line { padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; }
+  .bl-bridge-line.ok { background: #e3f9e5; color: #207227; }
+  .bl-bridge-line.bad { background: #fff0f0; color: #ab1c1c; }
+  .bl-connection-hint { color: #627080; padding: 2px 0; }
   .bl [hidden] { display: none !important; }
   .bl label { display: block; font-size: 12px; margin-bottom: 8px; }
   .bl select { max-width: 100%; padding: 5px; margin: 4px 0; }
@@ -215,13 +220,25 @@ export function mountControls(root: HTMLElement): void {
         return;
       }
       const bridges = res.bridges as { id: string; name: string; url: string; connected: boolean }[] | undefined;
-      statusEl.textContent = bridges?.length
-        ? bridges.map((bridge) => `${bridge.connected ? "已连接" : "未连接"} · ${bridge.name} · ${bridge.url}`).join("\n")
-        : "暂无启用的桥接服务，请在下方添加并保存。";
-      if (bridges?.some((bridge) => !bridge.connected)) {
-        statusEl.textContent += "\n请检查对应服务是否启动，Host / Port / Token 是否一致，以及网络是否可达。";
+      statusEl.replaceChildren();
+      statusEl.className = "status";
+      if (!bridges?.length) {
+        statusEl.textContent = "暂无启用的桥接服务，请在下方添加并保存。";
+        return;
       }
-      statusEl.className = bridges?.length && bridges.every((bridge) => bridge.connected) ? "status ok" : "status bad";
+      statusEl.classList.add("bl-bridges");
+      for (const bridge of bridges) {
+        const row = document.createElement("div");
+        row.className = `bl-bridge-line ${bridge.connected ? "ok" : "bad"}`;
+        row.textContent = `${bridge.connected ? "已连接" : "未连接"} · ${bridge.name} · ${bridge.url}`;
+        statusEl.appendChild(row);
+      }
+      if (bridges.some((bridge) => !bridge.connected)) {
+        const hint = document.createElement("div");
+        hint.className = "bl-connection-hint";
+        hint.textContent = "未连接的服务：请检查是否已启动，Host / Port / Token 是否一致，以及网络是否可达。";
+        statusEl.appendChild(hint);
+      }
     });
   }
 

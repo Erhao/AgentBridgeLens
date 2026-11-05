@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BridgeLens Demo · Checkout</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6fb;color:#182741;font:16px/1.6 system-ui,sans-serif}header{height:80px;padding:0 64px;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid #e1e7f0}header strong{font-size:21px}header span,.muted{color:#65738a}main{max-width:1120px;margin:48px auto}.eyebrow{font-size:12px;color:#5267db;font-weight:750;letter-spacing:2px}h1{font-size:42px;letter-spacing:-1.5px;line-height:1.2;margin:14px 0}p{color:#65738a}.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:28px;margin-top:32px}.card{background:white;border:1px solid #e0e6f0;border-radius:18px;padding:30px}h2{font-size:20px;margin:0 0 22px}.row{display:flex;justify-content:space-between;padding:16px 0;border-bottom:1px solid #edf0f6}.price{font-size:30px;font-weight:750}.tag{font-size:12px;padding:4px 10px;background:#eaf7f0;color:#23744a;border-radius:8px}button{border:0;border-radius:10px;background:#5267db;color:white;font:600 16px system-ui;padding:16px;width:100%;margin-top:22px;cursor:pointer}.note{font-size:13px;background:#f6f7fc;border-radius:10px;padding:14px;color:#65738a}footer{font-size:12px;color:#76839a;margin-top:25px}code{font-size:13px;color:#5267db}li{margin:12px 0;color:#65738a}
+</style>
+<header><strong>AgentBridgeLens <span style="font-weight:400">/ browser demo</span></strong><span>Local fixture · No personal data</span></header>
+<main><div class="eyebrow">SEE THE PAGE. FIND THE CAUSE. VERIFY THE FIX.</div><h1>Your browser, in the debugging loop.</h1><p>A sample checkout for real DOM inspection, visual annotations and live operation status.</p>
+<div class="grid"><section class="card"><h2>Order summary <span class="tag" style="float:right">Demo only</span></h2><div class="row"><span>Workspace plan</span><strong>$24.00</strong></div><div class="row"><span>Team seats</span><strong>3</strong></div><div class="row"><span>Monthly total</span><span class="price">$72.00</span></div><button id="checkout">Continue to checkout →</button><p class="note">Try inspecting <code>#checkout</code> and marking the exact element you want to discuss.</p></section>
+<section class="card"><h2>From a question to evidence</h2><ol><li>Identify the right tab.</li><li>Inspect the element and its styles.</li><li>Read captured errors and requests.</li><li>Mark the element for review.</li><li>Verify after changing the source.</li></ol><p class="note">The extension runs in Chrome. An MCP client and your Bridge connect it to your coding agent.</p></section></div>
+<footer>Documentation demo · Actual extension output · The sample button does not submit an order</footer></main>
+<script>document.querySelector('button').onclick=()=>console.info('Demo checkout clicked; no order submitted');</script>
+</html>

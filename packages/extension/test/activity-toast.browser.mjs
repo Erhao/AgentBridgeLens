@@ -98,7 +98,12 @@ try {
   const boxes = await toast.locator(".card").evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top));
   assert.ok(boxes[0] < boxes[1], "newest card is visually below older work");
   if (process.env.ABL_TOAST_SCREENSHOT) await a.screenshot({ path: process.env.ABL_TOAST_SCREENSHOT });
+  const secondProgress = toast.locator(`[data-activity-id="${secondId}"] .progress`);
+  assert.equal(await secondProgress.isVisible(), true, "completed cards show a countdown bar");
+  const beforeProgress = await secondProgress.locator(".progress-fill").evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).a);
   await a.waitForTimeout(400);
+  const afterProgress = await secondProgress.locator(".progress-fill").evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).a);
+  assert.ok(afterProgress < beforeProgress, "countdown bar shrinks as time elapses");
   assert.equal(await toast.locator(`[data-activity-id="${secondId}"]`).count(), 1, "completed card stays for its delay");
   await toast.locator(`[data-activity-id="${secondId}"]`).waitFor({ state: "detached", timeout: 2000 });
   assert.equal(await toast.locator(`[data-activity-id="${firstId}"]`).count(), 1, "another running card remains visible");
@@ -115,6 +120,38 @@ try {
   assert.match(rapidText[1], /工具：get_performance_metrics/);
   assert.match(rapidText[2], /工具：get_errors/);
   await toast.waitFor({ state: "detached", timeout: 2000 });
+
+  await call("get_page_info", { tabId: aId });
+  await toast.waitFor();
+  const pinnedId = await toast.locator(".card").first().getAttribute("data-activity-id");
+  const pinnedCard = toast.locator(`[data-activity-id="${pinnedId}"]`);
+  await pinnedCard.hover();
+  await a.waitForFunction((id) => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelector(`[data-activity-id="${id}"]`)?.dataset.pinned === "true", pinnedId);
+  assert.equal(await pinnedCard.locator(".progress").isVisible(), false, "hover hides the progress bar");
+  await a.mouse.move(0, 0);
+  await a.waitForTimeout(1000);
+  assert.equal(await pinnedCard.count(), 1, "moving away never restarts a pinned countdown");
+  await call("get_errors", { tabId: aId }, client2);
+  await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelectorAll(".card").length === 2);
+  if (process.env.ABL_PINNED_SCREENSHOT) await a.screenshot({ path: process.env.ABL_PINNED_SCREENSHOT });
+  await a.waitForTimeout(1000);
+  assert.equal(await toast.locator(".card").count(), 1, "other cards expire independently of pinned cards");
+  await call("capture_screenshot", { tabId: aId });
+  await pinnedCard.waitFor();
+  assert.equal(await pinnedCard.getAttribute("data-pinned"), "true", "screenshot suppression preserves pinned state");
+  await pinnedCard.locator(".card-close").click();
+  await a.mouse.move(0, 0);
+  await pinnedCard.waitFor({ state: "detached" });
+  assert.notEqual(await worker.evaluate(async () => (await chrome.storage.local.get("activityToastEnabled")).activityToastEnabled), false, "closing one card does not disable the overlay");
+  await toast.waitFor({ state: "detached", timeout: 2000 });
+  const dismissRunning = call("replay_actions", { tabId: bId, actions: Array.from({ length: 8 }, () => ({ type: "scroll", x: 0, y: 0 })) });
+  await toast.waitFor();
+  const dismissedId = await toast.locator(".card").first().getAttribute("data-activity-id");
+  await toast.locator(".card-close").first().click();
+  await a.mouse.move(0, 0);
+  await dismissRunning;
+  await a.waitForTimeout(150);
+  assert.equal(await toast.locator(`[data-activity-id="${dismissedId}"]`).count(), 0, "dismissed running calls do not reappear when completed");
 
   const settings2 = await context.newPage();
   await settings2.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
@@ -170,7 +207,9 @@ try {
   }, shot.dataUrl);
   assert.deepEqual(pixel, [255, 255, 255, 255], "automatic toast must not appear in tool screenshots");
   await toast.waitFor();
-  await toast.locator("button").click();
+  await toast.locator(".card").first().hover();
+  await toast.locator(".header button").click();
+  await a.mouse.move(0, 0);
   await toast.waitFor({ state: "detached" });
   await call("get_page_info", { tabId: bId });
   await a.waitForTimeout(200);
@@ -218,7 +257,7 @@ try {
   assert.equal(await a.locator("#bridgelens-reload-hint").count(), 0, "healthy recovered pages do not ask for a refresh");
   await recoveryPopup.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
   await toast.waitFor({ state: "detached" });
-  console.log("PASS: automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
+  console.log("PASS: countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
 } finally {
   await context?.close();
   for (const socket of ws.clients) socket.terminate();

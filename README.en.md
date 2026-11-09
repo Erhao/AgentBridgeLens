@@ -168,6 +168,14 @@ Connect the client to `http://<bridge-host>:19223/mcp` with `Authorization: Bear
 
 HTTP uses stateless Streamable HTTP with SSE responses to POST requests. It does not implement legacy HTTP+SSE, session resumption or standalone GET event streams. Browser-based MCP clients also require an Origin allowlist. See the [Bridge documentation](packages/bridge/README.md) for environment variables, authentication and limitations.
 
+## Live activity cards
+
+Enable **“网页自动显示悬浮状态”** to display one card per action, stacked with the newest at the bottom. Running actions remain visible. Completed actions show a shrinking countdown bar and disappear after the configured retention period, which defaults to 2 seconds.
+
+Hovering a card (or focusing its controls) pins it: the countdown stops and the progress bar disappears. Moving away does not restart the timer. Click that card’s **×** to dismiss it; other cards keep their own timers, and automatic prompts remain enabled. The header’s **“关闭自动提示”** button disables automatic page prompts until you enable them again in the extension.
+
+Pinned cards stay on the current page and survive temporary screenshot suppression. Refreshing the page or disabling prompts clears the pinned state.
+
 ## 🧰 MCP tools
 
 This list follows the current [MCP registrations](packages/bridge/src/mcp-server.ts). Describe your goal in natural language; you do not need to memorize tool names.

@@ -69,3 +69,35 @@ export function visibleActivities(snapshot: ActivitySnapshot, seconds: number, n
     (activity.finishedAt !== undefined && activity.finishedAt + seconds * 1000 > now))
     .sort((a, b) => a.startedAt - b.startedAt || (a.sequence ?? 0) - (b.sequence ?? 0));
 }
+
+/** Hover pins survive metadata eviction; dismissing one call never disables others. */
+export class ActivityToastState {
+  private snapshot: ActivitySnapshot = { active: [] };
+  private pinned = new Map<string, Activity>();
+  private dismissed = new Set<string>();
+
+  update(snapshot: ActivitySnapshot) {
+    this.snapshot = snapshot;
+    const latest = new Map<string, Activity>();
+    for (const activity of [...(snapshot.recent ?? []), ...(snapshot.last ? [snapshot.last] : []), ...snapshot.active]) latest.set(activity.id, activity);
+    for (const id of this.pinned.keys()) if (latest.has(id)) this.pinned.set(id, latest.get(id)!);
+    for (const id of this.dismissed) if (!latest.has(id)) this.dismissed.delete(id);
+  }
+
+  pin(id: string) {
+    if (this.dismissed.has(id) || this.pinned.has(id)) return;
+    const activity = [...this.snapshot.active, ...(this.snapshot.last ? [this.snapshot.last] : []), ...(this.snapshot.recent ?? [])].find((item) => item.id === id);
+    if (activity) this.pinned.set(id, activity);
+  }
+
+  isPinned(id: string) { return this.pinned.has(id); }
+  dismiss(id: string) { this.pinned.delete(id); this.dismissed.add(id); }
+  resetInteraction() { this.pinned.clear(); this.dismissed.clear(); }
+
+  visible(seconds: number, now = Date.now()): Activity[] {
+    const visible = new Map(visibleActivities(this.snapshot, seconds, now).map((activity) => [activity.id, activity]));
+    for (const [id, activity] of this.pinned) visible.set(id, activity);
+    return [...visible.values()].filter((activity) => !this.dismissed.has(activity.id))
+      .sort((a, b) => a.startedAt - b.startedAt || (a.sequence ?? 0) - (b.sequence ?? 0));
+  }
+}

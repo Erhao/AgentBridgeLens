@@ -10,7 +10,7 @@ async function moduleFrom(source) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 }
 const activitySource = await readFile(new URL("../src/shared/activity.ts", import.meta.url), "utf8");
-const { describeActivity, formatActivity, visibleActivities } = await moduleFrom(activitySource);
+const { describeActivity, formatActivity, visibleActivities, ActivityToastState } = await moduleFrom(activitySource);
 
 test("activity describes data dimensions and filters without copying payloads", () => {
   assert.deepEqual(describeActivity("inspect_element", { selector: "#submit" }), {
@@ -127,4 +127,26 @@ test("toast cards are deduplicated, independently expire and stay in creation or
   assert.deepEqual(visibleActivities(snapshot, 5, 5000).map((item) => item.id), ["a", "b", "c"]);
   const duplicate = { ...first, state: "running", finishedAt: undefined };
   assert.equal(visibleActivities({ recent: [first], active: [duplicate] }, 2, 9000)[0].state, "running");
+});
+
+test("hover pins survive expiry and history eviction; closing a call stays local", () => {
+  const state = new ActivityToastState();
+  const first = { id: "first", tool: "get_page_info", dimension: "页面信息", scope: "", bridgeName: "A", state: "running", startedAt: 1000 };
+  state.update({ active: [first] });
+  state.pin("first");
+  const finished = { ...first, state: "completed", finishedAt: 2000 };
+  state.update({ active: [], recent: [finished] });
+  assert.equal(state.visible(2, 9000)[0].state, "completed", "pinned live content continues to update");
+  state.update({ active: [], recent: [] });
+  assert.equal(state.visible(2, 999999).length, 1, "server history eviction cannot unpin a card");
+  state.dismiss("first");
+  assert.equal(state.visible(2, 999999).length, 0);
+  const other = { ...first, id: "other", startedAt: 3000 };
+  state.update({ active: [first, other] });
+  state.dismiss("first");
+  state.update({ active: [other], recent: [{ ...finished, finishedAt: 10000 }] });
+  assert.deepEqual(state.visible(2, 10001).map((item) => item.id), ["other"], "dismissed calls do not return on new updates");
+  state.pin("other"); state.resetInteraction();
+  state.update({ active: [] });
+  assert.equal(state.visible(2, 999999).length, 0, "disabling the overlay clears pinned cards");
 });

@@ -44,6 +44,11 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
   const dependencies = {
     describeActivity,
     BRIDGE_COLORS: ["#60a5fa"],
+    ContentConnection: class {
+      async ensure() {}
+      forget() {}
+      async sendActivity(tabId, message) { return chrome.tabs.sendMessage(tabId, message, { frameId: 0 }); }
+    },
     BridgeConnections: class {
       constructor(callback) { handle = callback; }
       update() {}
@@ -59,12 +64,14 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     storage: { local: { get: async () => ({}) }, onChanged: noopEvent },
     runtime: {
       sendMessage: async (event) => { events.push(structuredClone(event)); },
-      onMessage: { addListener(listener) { listeners.push(listener); } }, onInstalled: noopEvent,
+      onMessage: { addListener(listener) { listeners.push(listener); }, removeListener(listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1); } }, onInstalled: noopEvent,
     },
     tabs: {
+      onRemoved: noopEvent,
       query: async () => [{ id: 42 }, { id: 43 }],
       sendMessage: async (id, message, options) => {
         pageEvents.push({ id, message: structuredClone(message), options });
+        if (message.type === "bridgelens-request") throw new Error("No receiving content script");
         if (id === 43) throw new Error("No content script");
       },
       get: async (id) => ({ id, title: "实际目标", url: "https://example.com/path?token=secret" }),
@@ -97,6 +104,9 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     await assert.rejects(handle({ tool: "get_cdp_network", params: { tabId: -1 } }, bridge), /No target/);
     assert.equal(events.at(-1).last.state, "failed");
     assert.equal(events.at(-1).recent.length, 3, "snapshots preserve rapid completions instead of replacing the previous card");
+    const listenerCount = listeners.length;
+    await assert.rejects(handle({ tool: "get_page_info", params: {} }, bridge), /No receiving content script/);
+    assert.equal(listeners.length, listenerCount, "failed sends remove temporary response listeners immediately");
     assert.equal(events.at(-1).active.length, 0);
   } finally {
     globalThis.chrome = originalChrome;

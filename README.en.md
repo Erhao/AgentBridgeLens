@@ -115,7 +115,7 @@ Restart the client or reload its MCP connection. The client starts the Bridge au
 1. Click AgentBridgeLens in the Chrome toolbar.
 2. Expand **“数据访问与授权”** (data access and consent), read the notice, check the consent box and click **“应用授权设置”** (apply). **A new installation will not connect until consent is applied.**
 3. Under **“桥接服务”** (Bridges), check Host `127.0.0.1`, Port `19222`, and that the service is enabled. Save changes with **“保存此服务”**.
-4. Once the status shows **“已连接”** (connected), open your target HTTP/HTTPS page. Refresh pages that were already open before installing or updating the extension.
+4. Once the status shows **“已连接”** (connected), open your target HTTP/HTTPS page. Content scripts on already-open ordinary webpages recover automatically after installation, updates or extension reloads; refresh only if recovery fails.
 5. Ask your AI: **“Use bridgelens to confirm the current page and capture a screenshot.”**
 
 ## 🔌 Multiple tabs, multiple Bridges and remote access
@@ -211,7 +211,7 @@ Download `agentbridgelens-updater.zip` once from [Releases](https://github.com/E
 | macOS | Double-click `update-extension.command`, or run `sh update-extension.command` |
 | Linux | Run `sh update-extension.sh` |
 
-On first use, enter the **original loaded extension directory** shown in Chrome’s extension details. The updater remembers it, downloads the latest stable release, verifies SHA256 and retains the previous version. Then click **Reload** on the original extension in `chrome://extensions/` and refresh the webpage.
+On first use, enter the **original loaded extension directory** shown in Chrome’s extension details. The updater remembers it, downloads the latest stable release, verifies SHA256 and retains the previous version. Then click **Reload** on the original extension in `chrome://extensions/`. Ordinary webpages recover their scripts and live overlays automatically without navigation or losing unsaved page state.
 
 **Keep the original directory and extension identity; do not uninstall and import a new copy.** This preserves Bridge settings and display preferences in Chrome. The updater does not migrate settings across machines or reinstallations.
 
@@ -293,4 +293,4 @@ Some detailed guides are currently in Chinese.
 | [Verification checklist (中文)](docs/VERIFICATION.md) | Functional verification and manual checks |
 | [Releasing (中文)](docs/RELEASING.md) | Automated versioning, builds and releases |
 
-If disconnected, check that **consent is applied, your MCP client has started the Bridge, and the WebSocket address, port and Token match on both sides**. If connected but tools fail, confirm the target is an ordinary webpage and refresh it after installing or updating the extension. For further debugging, open the extension’s Service Worker console from `chrome://extensions/`, or [file an issue](https://github.com/Erhao/AgentBridgeLens/issues).
+If disconnected, check that **consent is applied, your MCP client has started the Bridge, and the WebSocket address, port and Token match on both sides**. If connected but tools fail, confirm the target is an ordinary webpage and the extension has access to that site. Missing content scripts recover automatically; refresh the page only if recovery still fails. For further debugging, open the extension’s Service Worker console from `chrome://extensions/`, or [file an issue](https://github.com/Erhao/AgentBridgeLens/issues).

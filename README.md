@@ -115,7 +115,7 @@ claude mcp add -s user bridgelens -- npx -y agentbridgelens
 1. 点击 Chrome 工具栏的 AgentBridgeLens 图标。
 2. 展开“数据访问与授权”，阅读说明，勾选同意并点击“应用授权设置”。**首次安装必须完成这一步才会连接。**
 3. 在“桥接服务”中确认 Host 为 `127.0.0.1`、Port 为 `19222`，服务已启用；修改后点击“保存此服务”。
-4. 顶部显示“已连接”后，打开目标 HTTP/HTTPS 网页。安装或更新前已打开的网页请刷新一次。
+4. 顶部显示“已连接”后，打开目标 HTTP/HTTPS 网页。安装、更新或重载前已打开的普通网页会自动恢复脚本，无需逐个刷新；恢复失败时才提示刷新。
 5. 对 AI 说：**“用 bridgelens 确认当前页面并截一张图。”**
 
 ## 🔌 多标签页、多 Bridge 与远程使用
@@ -211,7 +211,7 @@ HTTP 使用无状态 Streamable HTTP，支持 POST 的 SSE 响应；不提供旧
 | macOS | 双击 `update-extension.command`，或运行 `sh update-extension.command` |
 | Linux | 运行 `sh update-extension.sh` |
 
-首次填写 Chrome 扩展详情中显示的**原加载目录**；之后会记住目录，下载最新正式版、校验 SHA256 并保留上一版。更新后在 `chrome://extensions/` 点击原插件的“重新加载”，再刷新网页。
+首次填写 Chrome 扩展详情中显示的**原加载目录**；之后会记住目录，下载最新正式版、校验 SHA256 并保留上一版。更新后在 `chrome://extensions/` 点击原插件的“重新加载”；普通网页的脚本和实时提示会自动恢复，不会刷新页面或丢失未保存输入。
 
 **保留原目录和原插件身份，不要卸载后重新导入。** 这样可保留 Chrome 中的桥接配置和显示偏好；工具不负责换电脑或重装后的配置迁移。
 
@@ -291,4 +291,4 @@ ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/readme/screensh
 | [验证清单](docs/VERIFICATION.md) | 功能验证与操作检查 |
 | [发布流程](docs/RELEASING.md) | 自动版本、构建和发布 |
 
-遇到“未连接”，先确认**授权已应用、MCP 客户端已启动 Bridge、两端 WebSocket 地址/端口/Token 一致**。如果显示已连接但无法操作，确认目标是普通网页，并在安装或更新扩展后刷新一次。需要进一步排查时，从 `chrome://extensions/` 打开扩展的 Service Worker 控制台查看日志，或 [提交 Issue](https://github.com/Erhao/AgentBridgeLens/issues)。
+遇到“未连接”，先确认**授权已应用、MCP 客户端已启动 Bridge、两端 WebSocket 地址/端口/Token 一致**。如果显示已连接但无法操作，确认目标是普通网页且扩展拥有该站点的访问权限。新版会自动恢复失效的网页脚本；若仍出现恢复失败提示，再刷新该页面重试。需要进一步排查时，从 `chrome://extensions/` 打开扩展的 Service Worker 控制台查看日志，或 [提交 Issue](https://github.com/Erhao/AgentBridgeLens/issues)。

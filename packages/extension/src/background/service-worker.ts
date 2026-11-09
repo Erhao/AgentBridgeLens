@@ -5,6 +5,7 @@ import type {
 } from "../shared/protocol";
 import { describeActivity, type Activity } from "../shared/activity";
 import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
+import { ContentConnection } from "./content-connection";
 import { BridgeConnections, type BridgeSource } from "./bridge-connections";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 import {
@@ -24,6 +25,8 @@ import {
 } from "./tabs";
 
 const connections = new BridgeConnections(handleToolCall);
+const contentConnection = new ContentConnection();
+chrome.tabs.onRemoved.addListener((tabId) => contentConnection.forget(tabId));
 let configRevision = 0;
 let bridgeColors = new Map<string, string>();
 async function connect() {
@@ -43,6 +46,7 @@ async function connect() {
 
 /** 截图：激活 tab 用 captureVisibleTab（快、无横幅）；后台 tab 用 CDP（可截后台）。 */
 async function screenshot(tabId: number, selector?: string): Promise<{ dataUrl: string }> {
+  await contentConnection.ensure(tabId).catch(() => { /* CDP still supports some restricted pages */ });
   const token = crypto.randomUUID();
   const notify = (hide: boolean) => chrome.tabs.sendMessage(tabId, {
     type: "bridgelens-activity-capture", token, hide,
@@ -77,11 +81,13 @@ async function sendToContentScript(
   tool: string,
   params: Record<string, unknown>
 ): Promise<unknown> {
+  await contentConnection.ensure(tabId);
   return new Promise((resolve, reject) => {
     const id = crypto.randomUUID();
     const msg: ContentRequest = { type: "bridgelens-request", id, tool, params };
 
     const timeout = setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(listener);
       reject(new Error(`Content script timeout for '${tool}'`));
     }, 15_000);
 
@@ -102,7 +108,11 @@ async function sendToContentScript(
     };
 
     chrome.runtime.onMessage.addListener(listener);
-    chrome.tabs.sendMessage(tabId, msg);
+    void chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }).catch((error: unknown) => {
+      clearTimeout(timeout);
+      chrome.runtime.onMessage.removeListener(listener);
+      reject(error);
+    });
   });
 }
 
@@ -192,7 +202,7 @@ function publishActivities() {
     if (revision !== activityRevision) return;
     for (const tab of tabs) {
       if (typeof tab.id !== "number") continue;
-      void chrome.tabs.sendMessage(tab.id, message, { frameId: 0 }).catch(() => {
+      void contentConnection.sendActivity(tab.id, message).catch(() => {
         /* restricted pages / content script not ready */
       });
     }
@@ -312,8 +322,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "bridgelens-keepalive") connect();
 });
 
-// 扩展更新/安装后，旧标签页里的 content script 会失效，需刷新才能恢复连接。
-// 注入一个顶部提示条提醒用户刷新（截图/网络抓包等 CDP 类工具不受影响、无需刷新）。
+// 安装/更新后自动恢复旧标签页的 content script；恢复失败时才提示刷新。
+// 不导航或刷新页面，避免丢失用户未保存的输入。
 // 该函数经 chrome.scripting 注入页面执行，必须自包含（仅用 DOM / location）。
 function showReloadHint() {
   const ID = "bridgelens-reload-hint";
@@ -327,7 +337,7 @@ function showReloadHint() {
   const msg = document.createElement("span");
   msg.style.flex = "1";
   msg.textContent =
-    "AgentBridgeLens 已更新/加载，刷新本页以恢复与扩展的连接（截图、网络抓包等无需刷新）。";
+    "AgentBridgeLens 网页脚本未能自动恢复。请检查扩展的站点访问权限，或刷新本页后重试。";
   const reload = document.createElement("button");
   reload.textContent = "刷新";
   reload.style.cssText =
@@ -348,11 +358,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
   for (const t of tabs) {
     if (typeof t.id !== "number") continue;
-    chrome.scripting
-      .executeScript({ target: { tabId: t.id }, func: showReloadHint })
-      .catch(() => {
+    void contentConnection.ensure(t.id).catch(() => {
+      void chrome.scripting.executeScript({ target: { tabId: t.id! }, func: showReloadHint }).catch(() => {
         /* 受限页面（如 web store / PDF viewer）忽略 */
       });
+    });
   }
 });
 

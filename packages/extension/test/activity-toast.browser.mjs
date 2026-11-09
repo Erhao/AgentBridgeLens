@@ -54,7 +54,7 @@ try {
     ...(process.env.ABL_CHROMIUM_EXECUTABLE ? { executablePath: process.env.ABL_CHROMIUM_EXECUTABLE } : {}),
     args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
   });
-  const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
+  let worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   const extensionId = new URL(worker.url()).host;
   await worker.evaluate(([port, port2]) => chrome.storage.local.set({
     bridgeProfiles: [
@@ -187,9 +187,38 @@ try {
   await toast.waitFor();
   const dom = await call("get_dom_snapshot", { tabId: aId, selector: "html" });
   assert.ok(!JSON.stringify(dom).includes("bridgelens-activity-toast"), "toast is excluded from DOM snapshots");
-  await worker.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
+  // Reload the actual extension while leaving both web pages untouched.
+  await a.evaluate(() => { window.__ablRecoveryMarker = "unsaved-page-state"; });
+  const oldClient = client;
+  const manager = await context.newPage();
+  await manager.goto("chrome://extensions");
+  await manager.evaluate(() => chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true }));
+  const reloadError = await manager.evaluate((id) => new Promise((done) => {
+    chrome.developerPrivate.reload(id, { failQuietly: true }, () => done(chrome.runtime.lastError?.message));
+  }), extensionId);
+  assert.equal(reloadError, undefined);
+  const recoveryPopup = await context.newPage();
+  await recoveryPopup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
+  for (let i = 0; (client === oldClient || client.readyState !== 1) && i < 100; i++) await a.waitForTimeout(50);
+  assert.notEqual(client, oldClient, "bridge reconnects after extension reload");
+  await a.bringToFront();
+  const recoveredShot = await call("capture_screenshot", { tabId: aId });
+  const recoveredPixel = await a.evaluate(async (url) => {
+    const image = new Image(); image.src = url; await image.decode();
+    const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
+    const ctx = canvas.getContext("2d"); ctx.drawImage(image, 0, 0);
+    return [...ctx.getImageData(image.width - 30, image.height - 30, 1, 1).data];
+  }, recoveredShot.dataUrl);
+  assert.deepEqual(recoveredPixel, [255, 255, 255, 255], "auto-recovery must not leak the overlay into screenshots");
+  const recovered = await call("get_page_info", { tabId: aId });
+  assert.equal(recovered.title, "网站 A", "content tools recover without refreshing the page");
+  await toast.waitFor();
+  assert.equal(await toast.count(), 1, "orphaned old toasts are removed during recovery");
+  assert.equal(await a.evaluate(() => window.__ablRecoveryMarker), "unsaved-page-state", "recovery never navigates or refreshes the page");
+  assert.equal(await a.locator("#bridgelens-reload-hint").count(), 0, "healthy recovered pages do not ask for a refresh");
+  await recoveryPopup.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
   await toast.waitFor({ state: "detached" });
-  console.log("PASS: default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
+  console.log("PASS: automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
 } finally {
   await context?.close();
   for (const socket of ws.clients) socket.terminate();

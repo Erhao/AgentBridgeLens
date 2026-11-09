@@ -10,6 +10,9 @@ import { markElements, visualizeLayout, showResponsiveFrame, clearOverlays } fro
 import { startRecording, stopRecording, replayActions, type RecordedAction } from "./recorder";
 import { showHud, hideHud, updateHud } from "./hud";
 
+// Old extension contexts can leave their DOM behind after a reload.
+for (const stale of document.querySelectorAll("#bridgelens-activity-toast")) stale.remove();
+document.getElementById("bridgelens-reload-hint")?.remove();
 startActivityToast();
 startConsoleCapture();
 startNetworkCapture();
@@ -44,7 +47,11 @@ const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
 };
 
 chrome.runtime.onMessage.addListener(
-  (message: ContentRequest, _sender, _sendResponse) => {
+  (message: ContentRequest | { type: "bridgelens-content-ping" }, _sender, sendResponse) => {
+    if (message.type === "bridgelens-content-ping") {
+      sendResponse({ ready: true, version: chrome.runtime.getManifest().version });
+      return;
+    }
     if (message.type !== "bridgelens-request") return;
 
     const handler = handlers[message.tool];

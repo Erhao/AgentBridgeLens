@@ -59,6 +59,10 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
     await client.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers } }));
     const { tools } = await client.listTools();
     assert.ok(tools.some((tool) => tool.name === "get_page_info"));
+    const script = tools.find((tool) => tool.name === "execute_js");
+    assert.equal(script.inputSchema.properties.activity.maxLength, 80);
+    assert.ok(!script.inputSchema.required.includes("activity"));
+    assert.ok(tools.filter((tool) => tool.name !== "execute_js").every((tool) => !tool.inputSchema.properties.activity), "ordinary tools add no explanation-token requirement");
     return client;
   }));
   const missing = await clients[0].callTool({ name: "get_page_info", arguments: {} });
@@ -68,9 +72,11 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
   // Simulate the browser extension on its real WebSocket protocol.
   const extension = new WebSocket(`ws://127.0.0.1:${wsPort}`);
   t.after(() => extension.terminate());
+  const relayed = [];
   extension.on("message", (raw) => {
     const request = JSON.parse(raw.toString());
     if (request.t === "ping") return;
+    relayed.push(request);
     const reply = request.tool === "capture_screenshot"
       ? { dataUrl: "data:image/png;base64,aGVsbG8=" }
       : { tabId: request.params.tabId, title: "Test page" };
@@ -85,6 +91,14 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
   assert.equal(JSON.parse(results[1].content[0].text).tabId, 22);
   const screenshot = await clients[0].callTool({ name: "capture_screenshot", arguments: {} });
   assert.deepEqual(screenshot.content[0], { type: "image", data: "aGVsbG8=", mimeType: "image/png" });
+  await clients[0].callTool({ name: "execute_js", arguments: { code: "2+2", tabId: 11 } });
+  const activity = "读取资源列表行数，检查列表是否为空";
+  await clients[0].callTool({ name: "execute_js", arguments: { code: "2+2", tabId: 22, activity } });
+  assert.equal(relayed.at(-1).params.activity, activity);
+  const beforeInvalid = relayed.length;
+  const invalid = await clients[0].callTool({ name: "execute_js", arguments: { code: "2+2", activity: "长".repeat(81) } });
+  assert.equal(invalid.isError, true);
+  assert.equal(relayed.length, beforeInvalid, "overlong descriptions are rejected before relay");
   await Promise.all(clients.map((client) => client.close()));
   extension.close();
   await once(extension, "close");

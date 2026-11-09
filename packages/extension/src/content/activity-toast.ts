@@ -1,4 +1,4 @@
-import { formatActivity, ActivityToastState, type ActivitySnapshot } from "../shared/activity";
+import { formatActivityCard, ActivityToastState, type ActivitySnapshot } from "../shared/activity";
 import { toastSeconds, withBridgeColors, isBridgeColor, BRIDGE_COLORS, type BridgeProfile } from "../shared/config";
 
 const HOST_ID = "bridgelens-activity-toast";
@@ -50,6 +50,9 @@ function render() {
       .card-close { flex:none; padding:0 6px; font-size:16px; line-height:20px; }
       .progress { height:3px; margin-top:9px; overflow:hidden; border-radius:3px; background:#edf3fc26; }
       .progress-fill { width:100%; height:100%; background:var(--accent); transform-origin:left; }
+      .technical { margin-top:6px; color:#afbdcf; font-size:11px; }
+      .technical summary { cursor:pointer; }
+      .technical pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0 0; font:inherit; }
       .body { white-space:pre-wrap; overflow-wrap:anywhere; }
     `;
     const header = document.createElement("div");
@@ -104,7 +107,13 @@ function render() {
       const fill = document.createElement("div");
       fill.className = "progress-fill";
       progress.appendChild(fill);
-      card.append(top, body, progress);
+      const technical = document.createElement("details");
+      technical.className = "technical";
+      const summary = document.createElement("summary");
+      summary.textContent = "技术细节";
+      const detail = document.createElement("pre");
+      technical.append(summary, detail);
+      card.append(top, body, technical, progress);
       const pin = () => { if (!state.isPinned(activity.id)) { state.pin(activity.id); render(); } };
       card.addEventListener("mouseenter", pin);
       card.addEventListener("focusin", pin);
@@ -115,7 +124,12 @@ function render() {
     const accent = isBridgeColor(color) ? color : BRIDGE_COLORS[0];
     card.style.setProperty("--accent", accent);
     card.style.backgroundImage = `linear-gradient(100deg, ${accent}24, transparent 75%)`;
-    card.querySelector(".body")!.textContent = formatActivity(activity);
+    card.querySelector(".body")!.textContent = formatActivityCard(activity);
+    card.querySelector(".technical pre")!.textContent = [
+      `类别：${activity.dimension}`, `工具：${activity.tool}`,
+      activity.tabId !== undefined ? `标签页：${activity.tabId}` : undefined,
+      activity.scope,
+    ].filter(Boolean).join("\n");
     const pinned = state.isPinned(activity.id);
     card.dataset.pinned = String(pinned);
     card.querySelector(".retention")!.textContent = pinned ? "已固定 · 点击 × 关闭" : activity.state === "running" ? "执行中 · 移入可固定" : "自动关闭 · 移入可固定";

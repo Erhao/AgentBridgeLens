@@ -178,6 +178,11 @@ HTTP 使用无状态 Streamable HTTP，支持 POST 的 SSE 响应；不提供旧
 
 固定卡片在当前页面保留，截图期间会临时隐藏，截图后恢复；刷新页面或关闭自动提示会清除固定状态。
 
+卡片会自动显示具体动作、目标范围及本地生成的结果统计，例如读取的日志条数、HTTP 异常数量和实际回放步数；工具名、标签页 ID 可展开「技术细节」查看。`execute_js` 可额外传入一句不超过 80 字的 `activity`，以「AI 说明」展示操作目的；普通工具无需填写。脚本、完整返回数据及日志原文不会直接铺到卡片上，也不会额外调用模型生成摘要。
+
+只有扩展更新时，自动文案和结果摘要即可生效。AI 说明还需要更新 **Bridge 源码/构建产物**并重新加载 MCP 连接，让客户端重新获取带 `activity` 字段的工具定义；目前 GitHub 自动发布的是扩展和更新工具，不能将它视为 npm Bridge 已同步更新。源代码更新后在仓库根目录运行 `pnpm --filter agentbridgelens build`，继续使用 `packages/bridge/dist/index.js` 启动 Bridge。
+
+
 ## 🧰 MCP 能力清单
 
 以下以当前 [MCP 注册代码](packages/bridge/src/mcp-server.ts) 为准。你无需记住工具名，描述目标即可。

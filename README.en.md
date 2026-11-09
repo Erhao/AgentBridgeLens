@@ -178,6 +178,11 @@ Hovering a card (or focusing its controls) pins it: the countdown stops and the 
 
 Pinned cards stay on the current page and survive temporary screenshot suppression. Refreshing the page or disabling prompts clears the pinned state.
 
+Cards show automatic action descriptions, target scope and locally generated outcome statistics, such as log counts, HTTP errors and replayed steps. Expand **“技术细节”** for tool names and tab IDs. Only `execute_js` adds an optional `activity` string (up to 80 characters), displayed explicitly as an AI-provided explanation. Ordinary tools require no extra narration, and no additional model request is made for summaries. Raw scripts, full responses and log contents are not copied into the cards.
+
+Automatic descriptions and summaries work with an extension-only update. AI explanations also require the updated Bridge source/build and an MCP reconnect so the client discovers the new field. GitHub releases currently publish the extension and updater; this does not imply that the npm Bridge package has been updated. After updating the source, run `pnpm --filter agentbridgelens build` and launch `packages/bridge/dist/index.js`.
+
+
 ## 🧰 MCP tools
 
 This list follows the current [MCP registrations](packages/bridge/src/mcp-server.ts). Describe your goal in natural language; you do not need to memorize tool names.

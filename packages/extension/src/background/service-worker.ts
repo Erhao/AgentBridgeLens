@@ -3,6 +3,7 @@ import type {
   ContentRequest,
   ContentResponse,
 } from "../shared/protocol";
+import { summarizeActivityResult } from "../shared/activity-summary";
 import { describeActivity, activitiesForWindow, type Activity } from "../shared/activity";
 import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
 import { ContentConnection } from "./content-connection";
@@ -228,9 +229,11 @@ async function handleToolCall(request: BridgeRequest, source: BridgeSource): Pro
   try {
     const result = await executeToolCall(request, source, activity);
     activity.state = result && typeof result === "object" && "error" in result ? "failed" : "completed";
+    activity.outcome = summarizeActivityResult(request.tool, result, activity.state === "failed");
     return result;
   } catch (error) {
     activity.state = "failed";
+    activity.outcome = summarizeActivityResult(request.tool, { error: error instanceof Error ? error.message : "" }, true);
     throw error;
   } finally {
     activity.finishedAt = Date.now();

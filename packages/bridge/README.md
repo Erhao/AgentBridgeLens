@@ -111,3 +111,19 @@ authentication, Origin/CORS validation, and stdio compatibility.
 ## License
 
 MIT
+
+## Concise activity explanations
+
+The updated `execute_js` tool accepts an optional `activity` string of 1–80 characters. Use one short Chinese sentence describing the current action and purpose. Do not include credentials or private values, and do not claim a result before execution. Other tools do not require this field; the extension generates their descriptions and structural result summaries locally without an additional AI request.
+
+```json
+{
+  "code": "({rowCount: document.querySelectorAll('tbody tr').length})",
+  "activity": "统计资源列表行数，检查筛选后是否为空",
+  "tabId": 123
+}
+```
+
+The extension labels this text as an AI explanation and separately displays actual result statistics. Existing calls containing only `code` remain valid. For script results, simple structural counters such as `rowCount`, `count`, `matchedCount`, `errorCount` or an array length can be summarized; arbitrary strings, object values and raw code are not shown automatically.
+
+To use the new field from this repository, build the updated Bridge with `pnpm --filter agentbridgelens build`, keep your existing host/port/token environment settings, and restart the MCP connection using `node /absolute/path/to/AgentBridgeLens/packages/bridge/dist/index.js`. Refresh the client's MCP tool list. The extension ZIP updater does not update the Bridge, and a GitHub extension release does not publish a new npm Bridge version.

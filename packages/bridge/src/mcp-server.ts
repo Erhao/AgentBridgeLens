@@ -54,6 +54,7 @@ export function createMcpServer(relay: WsRelay): McpServer {
 
   page("execute_js", "Execute a JavaScript expression in the page context through the Chrome Debugger API (may show a debugging banner)", {
     code: z.string().describe("JavaScript code to execute in the page context"),
+    activity: z.string().trim().min(1).max(80).optional().describe("用一句简短中文说明本次操作和目的，供网页实时提示；不含敏感值，不预先宣称结果。"),
   });
   page("get_dom_snapshot", "Get a simplified DOM snapshot of the page or a specific subtree", {
     selector: z.string().optional().describe("CSS selector for subtree root. Omit for full page."),

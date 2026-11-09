@@ -167,7 +167,7 @@ try {
   await call("get_performance_metrics", { tabId: aId }, client2);
   await call("get_errors", { tabId: aId });
   await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelectorAll(".card").length === 3);
-  const rapidText = await toast.locator(".body").allTextContents();
+  const rapidText = await toast.locator(".technical pre").allTextContents();
   assert.match(rapidText[0], /工具：get_page_info/);
   assert.match(rapidText[1], /工具：get_performance_metrics/);
   assert.match(rapidText[2], /工具：get_errors/);
@@ -205,6 +205,23 @@ try {
   await a.waitForTimeout(150);
   assert.equal(await toast.locator(`[data-activity-id="${dismissedId}"]`).count(), 0, "dismissed running calls do not reappear when completed");
 
+  const scriptInfo = await call("execute_js", {
+    tabId: aId,
+    code: '({elementCount:document.querySelectorAll("button").length, token:"private-result-value"})',
+    activity: "统计页面按钮数量，确认提交入口是否存在",
+  });
+  assert.equal(scriptInfo.value.elementCount, 1);
+  await a.waitForFunction(() => {
+    const text = document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent ?? "";
+    return text.includes("AI 说明：统计页面按钮数量") && text.includes("脚本返回：元素数 1");
+  });
+  if (process.env.ABL_ACTIVITY_DETAIL_SCREENSHOT) await a.screenshot({ path: process.env.ABL_ACTIVITY_DETAIL_SCREENSHOT });
+  assert.ok(!(await toastText()).includes("private-result-value"));
+  assert.ok(!(await toastText()).includes("工具："), "technical tool names are collapsed by default");
+  assert.match(await toast.locator(".technical pre").last().textContent(), /execute_js/);
+  await a.mouse.move(0, 0);
+  await toast.waitFor({ state: "detached", timeout: 2500 });
+
   const settings2 = await context.newPage();
   await settings2.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   assert.equal(await settings2.locator("#bl-toast-seconds").inputValue(), "0.8", "duration persists when reopening the popup");
@@ -238,10 +255,10 @@ try {
   assert.match(await toastText(), /网站 B/);
   assert.match(await toastText(), /测试 Bridge/);
   await call("get_console_logs", { tabId: aId });
-  assert.match(await toastText(), /操作回放/, "concurrent completed calls do not hide running work");
+  assert.match(await toastText(), /回放指定的页面操作序列/, "concurrent completed calls do not hide running work");
   await a.reload();
   await toast.waitFor();
-  assert.match(await toastText(), /操作回放/, "reloaded pages recover active work");
+  assert.match(await toastText(), /回放指定的页面操作序列/, "reloaded pages recover active work");
   await work;
   await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent.includes("已完成"));
   const failure = await call("inspect_element", { tabId: bId, selector: "#missing" });
@@ -309,7 +326,7 @@ try {
   assert.equal(await a.locator("#bridgelens-reload-hint").count(), 0, "healthy recovered pages do not ask for a refresh");
   await recoveryPopup.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
   await toast.waitFor({ state: "detached" });
-  console.log("PASS: multiple-window isolation, scoped startup snapshots, viewer/target movement, countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
+  console.log("PASS: human-readable action titles, optional AI description, local outcome summaries, collapsed technical details, multiple-window isolation, scoped startup snapshots, viewer/target movement, countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
 } finally {
   await context?.close();
   for (const socket of ws.clients) socket.terminate();

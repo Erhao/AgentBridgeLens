@@ -222,7 +222,7 @@ node update-extension.mjs --rollback         # 恢复上一版
 node update-extension.mjs --proxy http://127.0.0.1:7897
 ```
 
-支持环境变量代理、macOS 系统手动代理和保存指定代理地址。更多参数见 [更新工具说明](scripts/update/README.txt)。
+支持环境变量代理、macOS 系统手动代理和保存指定代理地址。临时网络错误默认最多尝试 5 次，按 1、2、4、8 秒逐步延长间隔并显示进度；可用 `--retries 6` 自定义额外重试次数。持续 403 会区分代理拒绝与站点拒绝；API 403/429 时会尝试公开发行页，仍沿用当前代理并校验官方包。更多参数见 [更新工具说明](scripts/update/README.txt)。
 
 ## 🛠️ 从源码运行
 

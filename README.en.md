@@ -222,7 +222,7 @@ node update-extension.mjs --rollback
 node update-extension.mjs --proxy http://127.0.0.1:7897
 ```
 
-Supports environment-variable proxies, macOS manual system proxies and saved explicit proxy addresses. See the [updater reference (中文)](scripts/update/README.txt) for details.
+Supports environment-variable proxies, macOS manual system proxies and saved explicit proxy addresses. Transient failures get up to five attempts with visible 1/2/4/8-second backoff; use `--retries 6` to customize additional retries. Persistent 403 errors distinguish proxy CONNECT rejection from endpoint rejection. API 403/429 errors fall back to the public release page using the same proxy, while retaining official package verification. See the [updater reference (中文)](scripts/update/README.txt) for details.
 
 ## 🛠️ Run from source
 

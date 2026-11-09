@@ -110,7 +110,7 @@ test("proxy connection failures are actionable and redact credentials", async (t
   const port = await listen(t, createServer((_req, res) => { res.writeHead(407); res.end(); }));
   const fetchImpl = createNetworkFetch(`http://name:private-password@127.0.0.1:${port}`, { env, retries: 0 });
   await assert.rejects(fetchImpl("http://example.invalid/"), (error) => {
-    assert.match(error.message, /--proxy/);
+    assert.match(error.message, /代理要求认证/);
     assert.ok(!error.message.includes("private-password"));
     return true;
   });
@@ -157,10 +157,10 @@ test("explicit proxy is remembered after a successful version check without losi
   t.after(() => rm(root, { recursive: true, force: true }));
   const preferenceFile = join(root, "updater.json");
   const selected = [];
-  await main(["--dir", join(root, "extension"), "--proxy", "7897", "--check"], {
+  await main(["--dir", join(root, "extension"), "--proxy", "7897", "--retries", "7", "--check"], {
     preferenceFile,
-    networkFetch: (proxy) => {
-      selected.push(proxy);
+    networkFetch: (proxy, options) => {
+      selected.push({ proxy, retries: options.retries });
       return async () => new Response(JSON.stringify({ tag_name: "extension-v1.5.2", assets: [
         {name:"agentbridgelens-extension-1.5.2.zip"}, {name:"agentbridgelens-extension-1.5.2.zip.sha256"},
       ] }));
@@ -169,7 +169,7 @@ test("explicit proxy is remembered after a successful version check without losi
   const saved = JSON.parse(await readFile(preferenceFile, "utf8"));
   assert.equal(saved.directory, join(await realpath(root), "extension"));
   assert.equal(saved.proxy, "http://127.0.0.1:7897/");
-  assert.deepEqual(selected, ["http://127.0.0.1:7897/"]);
+  assert.deepEqual(selected, [{ proxy: "http://127.0.0.1:7897/", retries: 7 }]);
 });
 
 test("transient proxy failures retry and an aborted download stops promptly", async (t) => {
@@ -185,4 +185,159 @@ test("transient proxy failures retry and an aborted download stops promptly", as
   assert.equal(await (await fetchImpl("http://retry.invalid/download")).text(), "retried");
   assert.equal(requests, 2);
   await assert.rejects(fetchImpl("http://retry.invalid/wait", { signal: AbortSignal.timeout(20) }), /超时或已取消/);
+});
+
+test("temporary HTTP failures get five attempts with visible exponential backoff", async (t) => {
+  let requests = 0;
+  const port = await listen(t, createServer((_req, res) => {
+    requests++;
+    if (requests <= 4) { res.writeHead(503); res.end("unavailable"); }
+    else res.end("downloaded");
+  }));
+  const delays = [], messages = [];
+  const fetchImpl = createNetworkFetch(`http://127.0.0.1:${port}`, {
+    env, sleep: async (ms) => { delays.push(ms); }, onRetry: (message) => messages.push(message),
+  });
+  const result = await fetchImpl("http://retry.invalid/archive?token=not-for-logs", { stage: "下载安装包" });
+  assert.equal(await result.text(), "downloaded");
+  assert.equal(requests, 5);
+  assert.deepEqual(delays, [1000, 2000, 4000, 8000]);
+  assert.equal(messages.length, 4);
+  assert.match(messages.at(-1), /第 5\/5 次/);
+  assert.ok(messages.every((message) => !message.includes("not-for-logs")));
+});
+
+test("persistent proxy CONNECT 403 is identified and only retried once", async (t) => {
+  let requests = 0;
+  const proxy = createServer();
+  proxy.on("connect", (_req, socket) => {
+    requests++;
+    socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+  });
+  const port = await listen(t, proxy);
+  const delays = [];
+  await assert.rejects(createNetworkFetch(`http://127.0.0.1:${port}`, {
+    env, retries: 9, sleep: async (ms) => { delays.push(ms); }, onRetry() {},
+  })("https://api.github.com/example", { stage: "检查最新版本" }), (error) => {
+    assert.equal(error.connectStatus, 403);
+    assert.equal(error.status, 403);
+    assert.match(error.message, /代理 CONNECT 隧道被拒绝/);
+    assert.match(error.message, /检查最新版本/);
+    assert.match(error.message, /更换出口节点/);
+    return true;
+  });
+  assert.equal(requests, 2);
+  assert.deepEqual(delays, [1000]);
+});
+
+test("Retry-After is honored, long waits and permanent HTTP errors stop retries", async (t) => {
+  let requests = 0;
+  const port = await listen(t, createServer((req, res) => {
+    requests++;
+    if (req.url.endsWith("/retry") && requests === 1) { res.writeHead(429, { "Retry-After": "2" }); res.end(); }
+    else if (req.url.endsWith("/retry")) res.end("ok");
+    else if (req.url.endsWith("/long")) { res.writeHead(429, { "Retry-After": "120" }); res.end(); }
+    else { res.writeHead(404); res.end(); }
+  }));
+  const delays = [];
+  const fetchImpl = createNetworkFetch(`http://127.0.0.1:${port}`, { env, sleep: async (ms) => { delays.push(ms); }, onRetry() {} });
+  assert.equal(await (await fetchImpl("http://retry.invalid/retry")).text(), "ok");
+  assert.deepEqual(delays, [2000]);
+  const before = requests;
+  await assert.rejects(fetchImpl("http://retry.invalid/long"), /至少等待 120 秒/);
+  await assert.rejects(fetchImpl("http://retry.invalid/missing"), /HTTP 404/);
+  assert.equal(requests, before + 2);
+  assert.equal(delays.length, 1);
+});
+
+test("API quota and CONNECT 403 fall back to release-page redirects on the same proxy", async (t) => {
+  for (const deniedByProxy of [false, true]) {
+    await t.test(deniedByProxy ? "API proxy CONNECT denied" : "API rate limit exhausted", async (t) => {
+      const root = await mkdtemp(join(tmpdir(), "abl-release-fallback-"));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const certPath = fileURLToPath(new URL("fixtures/proxy-test-cert.pem", import.meta.url));
+      const cert = await readFile(certPath), key = await readFile(new URL("fixtures/proxy-test-key.pem", import.meta.url));
+      const name = "agentbridgelens-extension-1.6.2.zip";
+      const zip = createZip([
+        { name: "manifest.json", data: JSON.stringify({ name: "AgentBridgeLens", manifest_version: 3, version: "1.6.2", background: { service_worker: "worker.js" }, action: { default_popup: "popup.html" } }) },
+        { name: "worker.js", data: "// worker" }, { name: "popup.html", data: "popup" },
+      ]);
+      let apiRequests = 0, headRequests = 0;
+      const hosts = [], retries = [];
+      const origin = tlsServer({ cert, key }, (req, res) => {
+        if (req.url.startsWith("/repos/")) {
+          apiRequests++;
+          res.writeHead(403, { "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "2000000000" }); res.end();
+        } else if (req.url.endsWith("/latest")) {
+          headRequests++;
+          assert.equal(req.method, "HEAD");
+          res.writeHead(302, { Location: "https://github.com/Erhao/AgentBridgeLens/releases/tag/extension-v1.6.2" }); res.end();
+        } else if (req.url.includes("/releases/tag/")) res.end();
+        else if (req.url.endsWith(".sha256")) res.end(`${createHash("sha256").update(zip).digest("hex")}  ${name}\n`);
+        else if (req.url.endsWith(".zip")) { res.writeHead(302, { Location: "https://release-assets.githubusercontent.com/archive" }); res.end(); }
+        else res.end(zip);
+      });
+      const originPort = await listen(t, origin);
+      const proxy = createServer();
+      proxy.on("connect", (req, socket, head) => {
+        hosts.push(req.url);
+        if (deniedByProxy && req.url === "api.github.com:443") {
+          apiRequests++;
+          socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+          return;
+        }
+        const upstream = connect(originPort, "127.0.0.1", () => {
+          socket.write("HTTP/1.1 200 Connection established\r\n\r\n");
+          if (head.length) upstream.write(head);
+          socket.pipe(upstream); upstream.pipe(socket);
+        });
+        socket.on("error", () => upstream.destroy()); upstream.on("error", () => socket.destroy()); socket.on("close", () => upstream.destroy());
+      });
+      const port = await listen(t, proxy);
+      const fetchImpl = createNetworkFetch(`http://127.0.0.1:${port}`, { env, caFile: certPath, sleep: async () => {}, onRetry: (message) => retries.push(message) });
+      await update(join(root, "extension"), { fetchImpl });
+      assert.equal((await validateExtension(join(root, "extension"))).version, "1.6.2");
+      assert.equal(apiRequests, deniedByProxy ? 2 : 1, "quota is not hammered; proxy rejection only retries once");
+      assert.equal(headRequests, 1);
+      assert.equal(retries.length, deniedByProxy ? 1 : 0);
+      assert.ok(hosts.includes("api.github.com:443") && hosts.includes("github.com:443") && hosts.includes("release-assets.githubusercontent.com:443"));
+    });
+  }
+});
+
+test("release-page fallback rejects foreign URLs and retry count is bounded", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "abl-release-reject-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const url of ["https://example.com/releases/tag/extension-v1.6.2", "https://github.com/Other/repo/releases/tag/extension-v1.6.2", "http://github.com/Erhao/AgentBridgeLens/releases/tag/extension-v1.6.2", "https://github.com:8443/Erhao/AgentBridgeLens/releases/tag/extension-v1.6.2"]) {
+    await assert.rejects(update(join(root, "extension"), { fetchImpl: async (_url, options) => {
+      if (options.method !== "HEAD") return new Response(null, { status: 403 });
+      const result = new Response(null);
+      Object.defineProperty(result, "url", { value: url });
+      return result;
+    } }), /无法从公开发行页确认版本/);
+  }
+  assert.equal(parseArgs([]).retries, 4);
+  assert.equal(parseArgs(["--retries", "0"]).retries, 0);
+  assert.equal(parseArgs(["--retries", "10"]).retries, 10);
+  for (const args of [["--retries"], ["--retries", "-1"], ["--retries", "11"], ["--retries", "1.5"]]) assert.throws(() => parseArgs(args));
+});
+
+test("temporary proxy CONNECT gateway failures also use the full retry budget", async (t) => {
+  let requests = 0;
+  const proxy = createServer();
+  proxy.on("connect", (_req, socket) => {
+    requests++;
+    socket.end("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+  });
+  const port = await listen(t, proxy);
+  const delays = [];
+  await assert.rejects(createNetworkFetch(`http://127.0.0.1:${port}`, {
+    env, sleep: async (ms) => { delays.push(ms); }, onRetry() {},
+  })("https://api.github.com/example"), (error) => {
+    assert.equal(error.connectStatus, 503);
+    assert.match(error.message, /代理 CONNECT 连接失败/);
+    return true;
+  });
+  assert.equal(requests, 5);
+  assert.deepEqual(delays, [1000, 2000, 4000, 8000]);
 });

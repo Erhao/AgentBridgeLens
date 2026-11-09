@@ -5,7 +5,7 @@ import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile, rename, rm, lstat, open, realpath, chmod } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { resolve, join, dirname, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
@@ -220,63 +220,131 @@ export async function chooseProxy(options, saved = {}, { env = process.env, plat
   return { proxy: "", source: "未配置代理" };
 }
 
-/** curl provides HTTP CONNECT, SOCKS and certificate verification on Node 20+. */
-export function createNetworkFetch(proxy = "", { env = process.env, executable = process.platform === "win32" ? "curl.exe" : "curl", retries = 2, caFile } = {}) {
-  return async (url, { signal, headers = {} } = {}) => {
+function safeUrl(value) {
+  try { const url = new URL(value); return `${url.hostname}${url.pathname}`; } catch { return "目标地址"; }
+}
+
+function retryPause(ms, signal) {
+  return new Promise((done, reject) => {
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(new Error("下载超时或已取消")); };
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); done(); }, ms);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+  });
+}
+
+function responseHeaders(text) {
+  const blocks = text.trim().split(/\r?\n\r?\n/).filter((block) => /^HTTP\//i.test(block));
+  const headers = new Headers();
+  for (const line of (blocks.at(-1) ?? "").split(/\r?\n/).slice(1)) {
+    const colon = line.indexOf(":");
+    if (colon > 0) headers.append(line.slice(0, colon), line.slice(colon + 1).trim());
+  }
+  return headers;
+}
+
+/** curl provides proxy support and exposes CONNECT/HTTP failures separately. */
+export function createNetworkFetch(proxy = "", {
+  env = process.env, executable = process.platform === "win32" ? "curl.exe" : "curl", retries = 4, caFile,
+  sleep = retryPause, onRetry = (message) => console.error(message),
+} = {}) {
+  return async (url, { signal, headers = {}, method = "GET", stage = "下载" } = {}) => {
     for (let attempt = 0; ; attempt++) {
+      const temporary = await mkdtemp(join(tmpdir(), "abl-http-"));
       try {
-        const data = await new Promise((done, reject) => {
+        const headerFile = join(temporary, "headers.txt");
+        const result = await new Promise((done, reject) => {
           const args = ["--disable", "--silent", "--show-error", "--fail", "--location", "--max-redirs", "8",
             "--connect-timeout", "15", "--max-time", "60", "--proto", "=http,https", "--proto-redir", "=http,https",
-            "--proxy", proxy];
+            "--dump-header", headerFile, "--write-out", "%{stderr}\n__ABL_META__%{http_code} %{http_connect} %{url_effective}\n", "--proxy", proxy];
           if (!proxy) args.push("--noproxy", "*");
           if (caFile) args.push("--cacert", caFile);
+          if (method === "HEAD") args.push("--head");
           for (const [key, value] of Object.entries(headers)) args.push("--header", `${key}: ${value}`);
           args.push("--url", String(url));
           const child = spawn(executable, args, { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
           const chunks = [];
-          let size = 0, stderr = "", stopped = false;
-          const stop = (error) => { if (!stopped) { stopped = true; child.kill(); reject(error); } };
+          let size = 0, stderr = "", stopped;
+          const stop = (error) => { if (!stopped) { stopped = error; child.kill(); } };
           const abort = () => stop(new Error("下载超时或已取消，请检查代理及网络后重试"));
           signal?.addEventListener("abort", abort, { once: true });
           if (signal?.aborted) abort();
           child.stdout.on("data", (chunk) => {
+            if (stopped) return;
             size += chunk.length;
             if (size > LIMIT) stop(new Error("下载文件超过大小限制"));
             else chunks.push(chunk);
           });
-          child.stderr.on("data", (chunk) => { stderr = (stderr + chunk.toString()).slice(-2048); });
+          child.stderr.on("data", (chunk) => { stderr = (stderr + chunk.toString()).slice(-8192); });
           child.on("error", (error) => stop(new Error(error.code === "ENOENT"
             ? "未找到 curl。macOS 通常自带；Windows 请使用系统 curl.exe；Linux 请安装 curl 后重试"
             : "无法启动下载程序，请检查 curl 是否可用")));
           child.on("close", (code) => {
             signal?.removeEventListener("abort", abort);
-            if (stopped) return;
-            if (code === 0) { done(Buffer.concat(chunks)); return; }
-            let detail = stderr.trim().replaceAll(proxy || "\0", proxyLabel(proxy));
-            if (proxy) {
-              const parsed = new URL(proxy);
-              for (const secret of [parsed.username, parsed.password, decodeURIComponent(parsed.username), decodeURIComponent(parsed.password)]) {
-                if (secret) detail = detail.replaceAll(secret, "***");
-              }
-            }
-            const error = new Error(`GitHub 下载失败（${proxyLabel(proxy)}）：${detail || `curl 退出码 ${code}`}。请确认代理软件已启动、端口正确；可用 --proxy 指定，或 --no-proxy 临时直连。`);
-            error.retryable = [5, 6, 7, 18, 28, 35, 52, 55, 56].includes(code);
-            reject(error);
+            if (stopped) reject(stopped);
+            else done({ code, data: Buffer.concat(chunks), stderr });
           });
         });
-        return new Response(data);
+        const meta = result.stderr.match(/__ABL_META__(\d{3}) (\d{3}) ([^\r\n]*)/);
+        const status = Number(meta?.[1] ?? 0), connectStatus = Number(meta?.[2] ?? 0);
+        const receivedHeaders = responseHeaders(await readFile(headerFile, "utf8").catch(() => ""));
+        if (result.code === 0) {
+          const response = new Response(method === "HEAD" || [204, 205, 304].includes(status) ? null : result.data, { status: status || 200, headers: receivedHeaders });
+          Object.defineProperty(response, "url", { value: meta?.[3] || String(url) });
+          return response;
+        }
+        let detail = result.stderr.replace(/__ABL_META__[^\r\n]*/g, "").trim().replaceAll(proxy || "\0", proxyLabel(proxy));
+        if (proxy) {
+          const parsed = new URL(proxy);
+          for (const secret of [parsed.username, parsed.password, decodeURIComponent(parsed.username), decodeURIComponent(parsed.password)]) if (secret) detail = detail.replaceAll(secret, "***");
+        }
+        detail = detail.replace(/https?:\/\/[^\s]+/g, (value) => safeUrl(value));
+        const rateLimited = receivedHeaders.get("x-ratelimit-remaining") === "0" && [403, 429].includes(status);
+        const retryAfter = receivedHeaders.get("retry-after");
+        const parsedDelay = retryAfter === null ? 0 : /^\d+$/.test(retryAfter)
+          ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now();
+        const requestedDelay = Number.isFinite(parsedDelay) ? Math.max(0, parsedDelay) : 0;
+        let reason;
+        if (status === 407 || connectStatus === 407) reason = "代理要求认证（HTTP 407），请检查代理账号和密码";
+        else if (connectStatus === 403) reason = "代理 CONNECT 隧道被拒绝（HTTP 403），请检查代理规则或更换出口节点";
+        else if (connectStatus >= 400) reason = `代理 CONNECT 连接失败（HTTP ${connectStatus}），可能是上游暂时不可用，可重试或更换出口节点`;
+        else if (rateLimited) {
+          const reset = Number(receivedHeaders.get("x-ratelimit-reset"));
+          const resetDate = new Date(reset * 1000);
+          reason = "GitHub API 的当前出口 IP 请求额度已用完" + (reset > 0 && Number.isFinite(resetDate.getTime()) ? `，恢复时间 ${resetDate.toISOString()}` : "");
+        } else if (status === 403) reason = "目标站点返回 HTTP 403，可能是出口 IP 或访问策略限制，请尝试更换代理节点";
+        else if (status === 429) reason = "目标站点限流（HTTP 429），请等待后重试";
+        else reason = `${status ? `HTTP ${status}；` : ""}${detail || `curl 退出码 ${result.code}`}。请检查代理连接或用 --proxy 指定其他代理`;
+        if (requestedDelay > 30000) reason += `；服务器要求至少等待 ${Math.ceil(requestedDelay / 1000)} 秒，已停止自动重试`;
+        const error = new Error(`GitHub 下载失败【${stage}；${safeUrl(url)}；${proxyLabel(proxy)}】：${reason}`);
+        error.status = status || connectStatus;
+        error.connectStatus = connectStatus;
+        error.retryDelay = requestedDelay;
+        error.retryable = !rateLimited && requestedDelay <= 30000 && (
+          [408, 425, 429, 500, 502, 503, 504].includes(status || connectStatus) || status === 403 || connectStatus === 403 ||
+          (!status && connectStatus < 400 && [5, 6, 7, 18, 28, 35, 52, 55, 56].includes(result.code)));
+        error.maxRetries = status === 403 || connectStatus === 403 ? 1 : retries;
+        throw error;
       } catch (error) {
-        if (!error.retryable || attempt >= retries || signal?.aborted) throw error;
-        await new Promise((done) => setTimeout(done, 500 * (attempt + 1)));
+        if (!error.retryable || attempt >= Math.min(retries, error.maxRetries ?? retries) || signal?.aborted) throw error;
+        const wait = Math.max(1000 * 2 ** attempt, error.retryDelay || 0);
+        onRetry(`${stage}失败，${wait / 1000} 秒后重试（第 ${attempt + 2}/${Math.min(retries, error.maxRetries ?? retries) + 1} 次；${safeUrl(url)}${error.status ? `；HTTP ${error.status}` : ""}）`);
+        await sleep(wait, signal);
+      } finally {
+        await rm(temporary, { recursive: true, force: true });
       }
     }
   };
 }
 
-async function download(url, limit, fetchImpl) {
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(60000), headers: { "User-Agent": "AgentBridgeLens-Updater", Accept: "application/vnd.github+json" } });
-  if (!response.ok) throw new Error(`下载失败：HTTP ${response.status}，请检查网络或稍后重试`);
+async function download(url, limit, fetchImpl, stage) {
+  console.log(`正在${stage}（${new URL(url).hostname}）…`);
+  const response = await fetchImpl(url, { stage, signal: AbortSignal.timeout(60000), headers: { "User-Agent": "AgentBridgeLens-Updater", Accept: new URL(url).hostname === "api.github.com" ? "application/vnd.github+json" : "*/*" } });
+  if (!response.ok) {
+    const error = new Error(`GitHub 下载失败【${stage}；${new URL(url).hostname}】：HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   const chunks = [];
   let size = 0;
   for await (const chunk of response.body) {
@@ -287,22 +355,40 @@ async function download(url, limit, fetchImpl) {
   return Buffer.concat(chunks);
 }
 
+async function latestRelease(fetchImpl) {
+  try {
+    return { metadata: JSON.parse((await download(`https://api.github.com/repos/${REPO}/releases/latest`, 1024 * 1024, fetchImpl, "检查最新版本")).toString()), viaPage: false };
+  } catch (error) {
+    if (![403, 429].includes(error.status)) throw error;
+    console.error(`${error.message}\n改用 GitHub 公开发行页确认版本，保持当前代理设置。`);
+    const response = await fetchImpl(`https://github.com/${REPO}/releases/latest`, {
+      method: "HEAD", stage: "查询发行页", signal: AbortSignal.timeout(60000), headers: { "User-Agent": "AgentBridgeLens-Updater" },
+    });
+    const url = new URL(response.url);
+    const prefix = `/${REPO}/releases/tag/`;
+    if (!response.ok || url.origin !== "https://github.com" || !url.pathname.startsWith(prefix) || url.search || url.hash) throw new Error("无法从公开发行页确认版本，请更换代理节点后重试");
+    const tag = url.pathname.slice(prefix.length);
+    version(tag.replace(/^extension-v/, ""));
+    return { metadata: { tag_name: tag }, viaPage: true };
+  }
+}
+
 export async function update(target, { check = false, fetchImpl = fetch } = {}) {
   if (target === parse(target).root) throw new Error("不能将磁盘根目录用作安装目录");
   const current = existsSync(target) ? await validateExtension(target) : undefined;
   if (!current && existsSync(`${target}.abl-backup`)) throw new Error("原安装目录缺失但存在备份，请先运行 --rollback 恢复，避免丢失上一版");
-  const latest = JSON.parse((await download(`https://api.github.com/repos/${REPO}/releases/latest`, 1024 * 1024, fetchImpl)).toString());
+  const { metadata: latest, viaPage } = await latestRelease(fetchImpl);
   const releaseVersion = version(String(latest.tag_name).replace(/^extension-v/, ""));
   if (latest.tag_name !== `extension-v${releaseVersion}` || latest.draft || latest.prerelease) throw new Error("未找到有效的正式发布版本");
   const name = `agentbridgelens-extension-${releaseVersion}.zip`;
-  if (![name, `${name}.sha256`].every((name) => latest.assets?.some((asset) => asset.name === name))) throw new Error("最新发布缺少安装包或校验文件，请稍后重试");
+  if (!viaPage && ![name, `${name}.sha256`].every((name) => latest.assets?.some((asset) => asset.name === name))) throw new Error("最新发布缺少安装包或校验文件，请稍后重试");
   console.log(`当前版本：${current?.version ?? "未安装"}；GitHub 最新版：${releaseVersion}`);
   if (check || (current && compare(current.version, releaseVersion) >= 0)) return { version: releaseVersion, changed: false };
   const base = `https://github.com/${REPO}/releases/download/${latest.tag_name}`;
-  const checksum = (await download(`${base}/${name}.sha256`, 4096, fetchImpl)).toString().trim();
+  const checksum = (await download(`${base}/${name}.sha256`, 4096, fetchImpl, "下载校验文件")).toString().trim();
   const [hash, checksumName, ...rest] = checksum.split(/\s+/);
   if (!/^[a-f0-9]{64}$/i.test(hash) || checksumName !== name || rest.length) throw new Error("校验文件格式无效");
-  const zip = await download(`${base}/${name}`, LIMIT, fetchImpl);
+  const zip = await download(`${base}/${name}`, LIMIT, fetchImpl, "下载安装包");
   if (createHash("sha256").update(zip).digest("hex") !== hash.toLowerCase()) throw new Error("SHA256 校验失败，原版本未修改");
   await mkdir(dirname(target), { recursive: true });
   const temporary = await mkdtemp(join(dirname(target), ".abl-download-"));
@@ -328,10 +414,14 @@ function expandPath(value) {
   return resolve(value.replace(/^~(?=$|[\\/])/, homedir()));
 }
 export function parseArgs(args) {
-  const options = { rollback: false, check: false };
+  const options = { rollback: false, check: false, retries: 4 };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--dir" && args[i + 1] && !args[i + 1].startsWith("--")) options.directory = expandPath(args[++i]);
     else if (args[i] === "--proxy" && args[i + 1] && !args[i + 1].startsWith("--")) options.proxy = normalizeProxy(args[++i]);
+    else if (args[i] === "--retries" && /^\d+$/.test(args[i + 1] ?? "")) {
+      options.retries = Number(args[++i]);
+      if (options.retries > 10) throw new Error("重试次数须为 0～10");
+    }
     else if (args[i] === "--no-proxy") options.noProxy = true;
     else if (args[i] === "--rollback") options.rollback = true;
     else if (args[i] === "--check") options.check = true;
@@ -346,7 +436,7 @@ export function parseArgs(args) {
 export async function main(args = process.argv.slice(2), { preferenceFile = preferences, networkFetch = createNetworkFetch } = {}) {
   const options = parseArgs(args);
   if (options.help) {
-    console.log("用法：node update-extension.mjs [--dir 原扩展目录] [--check | --rollback] [--proxy 地址 | --no-proxy]\n代理支持 HTTP/HTTPS/SOCKS5；自动读取代理环境变量及 macOS 系统代理。--proxy 成功后会记住。\n首次运行可选择原安装目录；以后自动记住。--check 仅检查版本，--rollback 恢复上一版。\n请不要删除或重新导入 Chrome 中的原插件，更新后只点「重新加载」。");
+    console.log("用法：node update-extension.mjs [--dir 原扩展目录] [--check | --rollback] [--proxy 地址 | --no-proxy] [--retries 0～10]\n默认额外重试 4 次，显示进度并逐步延长间隔；持续 403 最多重试一次。\n代理支持 HTTP/HTTPS/SOCKS5；自动读取代理环境变量及 macOS 系统代理。--proxy 成功后会记住。\n首次运行可选择原安装目录；以后自动记住。--check 仅检查版本，--rollback 恢复上一版。\n请不要删除或重新导入 Chrome 中的原插件，更新后只点「重新加载」。");
     return;
   }
   if (Number(process.versions.node.split(".")[0]) < 20) throw new Error("需要 Node.js 20 或更高版本");
@@ -385,7 +475,7 @@ export async function main(args = process.argv.slice(2), { preferenceFile = pref
       console.log(`网络：${network.source} · ${proxyLabel(network.proxy)}`);
       let result;
       try {
-        result = await update(target, { check: options.check, fetchImpl: networkFetch(network.proxy) });
+        result = await update(target, { check: options.check, fetchImpl: networkFetch(network.proxy, { retries: options.retries }) });
       } catch (error) {
         // Finder-launched terminals may have neither environment variables nor a
         // manual system proxy (for example, when the proxy client uses only PAC).
@@ -397,7 +487,7 @@ export async function main(args = process.argv.slice(2), { preferenceFile = pref
         finally { prompt.close(); }
         if (!answer) throw error;
         options.proxy = normalizeProxy(answer);
-        result = await update(target, { check: options.check, fetchImpl: networkFetch(options.proxy) });
+        result = await update(target, { check: options.check, fetchImpl: networkFetch(options.proxy, { retries: options.retries }) });
       }
       if (options.check) console.log("仅检查版本，未修改扩展文件。");
       else if (!result.changed) console.log("本地已是最新版或更高版本，无需更新。");

@@ -3,7 +3,7 @@ import type {
   ContentRequest,
   ContentResponse,
 } from "../shared/protocol";
-import { describeActivity, type Activity } from "../shared/activity";
+import { describeActivity, activitiesForWindow, type Activity } from "../shared/activity";
 import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
 import { ContentConnection } from "./content-connection";
 import { BridgeConnections, type BridgeSource } from "./bridge-connections";
@@ -27,6 +27,12 @@ import {
 const connections = new BridgeConnections(handleToolCall);
 const contentConnection = new ContentConnection();
 chrome.tabs.onRemoved.addListener((tabId) => contentConnection.forget(tabId));
+chrome.tabs.onAttached.addListener((tabId, info) => {
+  // Running work follows its target tab; completed history belongs to where it happened.
+  for (const activity of activeActivities.values()) if (activity.tabId === tabId) activity.windowId = info.newWindowId;
+  // Also refresh a viewer tab moved to another window, including pinned cards.
+  publishActivities();
+});
 let configRevision = 0;
 let bridgeColors = new Map<string, string>();
 async function connect() {
@@ -196,15 +202,17 @@ function publishActivities() {
   // Clone now so in-flight query callbacks cannot mutate an older snapshot.
   const message = structuredClone({ type: "bridgelens-activities", ...activitySnapshot() });
   broadcast(message);
-  // Send to normal web pages too: the user can see background-target work
-  // on the page they are viewing, without opening an extension panel.
+  // Background-target work remains visible while switching tabs in that window.
+  // Other windows get an empty snapshot rather than unrelated activity metadata.
   void chrome.tabs.query({ url: ["http://*/*", "https://*/*"] }).then((tabs) => {
     if (revision !== activityRevision) return;
     for (const tab of tabs) {
       if (typeof tab.id !== "number") continue;
-      void contentConnection.sendActivity(tab.id, message).catch(() => {
-        /* restricted pages / content script not ready */
-      });
+      const scoped = { type: "bridgelens-activities", ...activitiesForWindow(message, tab.windowId) };
+      const hasActivity = scoped.active.length > 0 || (scoped.recent?.length ?? 0) > 0 || !!scoped.last;
+      const delivery = hasActivity ? contentConnection.sendActivity(tab.id, scoped)
+        : chrome.tabs.sendMessage(tab.id, scoped, { frameId: 0 });
+      void delivery.catch(() => { /* restricted pages / content script not ready */ });
     }
   }).catch(() => {});
 }
@@ -259,6 +267,7 @@ async function executeToolCall(request: BridgeRequest, source: BridgeSource, act
   // Metadata lookup must never prevent a tool from running.
   try {
     const tab = await chrome.tabs.get(tabId);
+    activity.windowId = tab.windowId;
     activity.page = tab.title;
     if (tab.url) activity.site = new URL(tab.url).origin;
   } catch { /* tab may have closed */ }
@@ -299,9 +308,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "bridgelens-get-activities") {
-    sendResponse(activitySnapshot());
+    const snapshot = activitySnapshot();
+    // Extension popup/side panel keep the global log; webpage startup is scoped too.
+    const fromWebpage = sender.tab && /^https?:\/\//i.test(sender.url ?? sender.tab.url ?? "");
+    sendResponse(fromWebpage ? activitiesForWindow(snapshot, sender.tab!.windowId) : snapshot);
   } else if (message?.type === "bridgelens-get-status") {
     const bridges = connections.status().map((bridge) => ({ ...bridge, color: bridgeColors.get(bridge.id) ?? BRIDGE_COLORS[0] }));
     sendResponse({ connected: bridges.some((bridge) => bridge.connected), bridges });

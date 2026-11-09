@@ -10,7 +10,7 @@ async function moduleFrom(source) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 }
 const activitySource = await readFile(new URL("../src/shared/activity.ts", import.meta.url), "utf8");
-const { describeActivity, formatActivity, visibleActivities, ActivityToastState } = await moduleFrom(activitySource);
+const { describeActivity, formatActivity, visibleActivities, ActivityToastState, activitiesForWindow } = await moduleFrom(activitySource);
 
 test("activity describes data dimensions and filters without copying payloads", () => {
   assert.deepEqual(describeActivity("inspect_element", { selector: "#submit" }), {
@@ -42,7 +42,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
   const listeners = [];
   const noopEvent = { addListener() {} };
   const dependencies = {
-    describeActivity,
+    describeActivity, activitiesForWindow,
     BRIDGE_COLORS: ["#60a5fa"],
     ContentConnection: class {
       async ensure() {}
@@ -67,14 +67,14 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
       onMessage: { addListener(listener) { listeners.push(listener); }, removeListener(listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1); } }, onInstalled: noopEvent,
     },
     tabs: {
-      onRemoved: noopEvent,
-      query: async () => [{ id: 42 }, { id: 43 }],
+      onRemoved: noopEvent, onAttached: noopEvent,
+      query: async () => [{ id: 42, windowId: 1 }, { id: 43, windowId: 2 }],
       sendMessage: async (id, message, options) => {
         pageEvents.push({ id, message: structuredClone(message), options });
         if (message.type === "bridgelens-request") throw new Error("No receiving content script");
         if (id === 43) throw new Error("No content script");
       },
-      get: async (id) => ({ id, title: "实际目标", url: "https://example.com/path?token=secret" }),
+      get: async (id) => ({ id, windowId: 1, title: "实际目标", url: "https://example.com/path?token=secret" }),
     },
     alarms: { create() {}, onAlarm: noopEvent },
   };
@@ -89,6 +89,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     const latest = events.at(-1);
     assert.equal(latest.active.length, 1, "first call remains running when second finishes");
     assert.equal(latest.last.tabId, 42);
+    assert.equal(latest.last.windowId, 1);
     assert.equal(latest.last.page, "实际目标");
     assert.equal(latest.last.site, "https://example.com");
     assert.equal(latest.last.state, "completed");
@@ -98,6 +99,12 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     listeners[0]({ type: "bridgelens-get-activities" }, {}, (result) => { snapshot = result; });
     assert.equal(snapshot.active.length, 1, "reopened panels can fetch current activity");
     assert.equal(snapshot.recent.length, 1, "completed cards remain alongside running cards");
+    assert.ok(pageEvents.filter((event) => event.id === 43).every((event) => !event.message.last && event.message.active.length === 0 && event.message.recent.length === 0), "other windows never receive unrelated operation data");
+    let scoped;
+    listeners[0]({ type: "bridgelens-get-activities" }, { tab: { id: 43, windowId: 2 }, url: "https://other.example/" }, (result) => { scoped = result; });
+    assert.equal(scoped.windowId, 2);
+    assert.equal(scoped.active.length, 0);
+    assert.equal(scoped.recent.length, 0);
     resolveTab([]);
     await pending;
     assert.equal(events.at(-1).active.length, 0);
@@ -149,4 +156,30 @@ test("hover pins survive expiry and history eviction; closing a call stays local
   state.pin("other"); state.resetInteraction();
   state.update({ active: [] });
   assert.equal(state.visible(2, 999999).length, 0, "disabling the overlay clears pinned cards");
+});
+
+test("window scoping excludes unresolved and browser-wide actions while preserving that window's last action", () => {
+  const first = { id: "a", windowId: 1, startedAt: 1, state: "completed", finishedAt: 5 };
+  const second = { id: "b", windowId: 2, startedAt: 2, state: "completed", finishedAt: 6 };
+  const pending = { id: "pending", state: "running", startedAt: 3 };
+  const snapshot = { active: [pending, { ...first, state: "running" }], recent: [first, second], last: second, revision: 9 };
+  const scoped = activitiesForWindow(snapshot, 1);
+  assert.deepEqual(scoped.active.map((a) => a.id), ["a"]);
+  assert.deepEqual(scoped.recent.map((a) => a.id), ["a"]);
+  assert.equal(scoped.last.id, "a");
+  assert.equal(scoped.windowId, 1);
+  assert.equal(scoped.revision, 9);
+  assert.equal(activitiesForWindow(snapshot, 3).last, undefined);
+  assert.equal(activitiesForWindow(snapshot, undefined).active.length, 0, "missing recipient window fails closed");
+});
+
+test("moving viewers or running targets clears pinned cards outside the receiving window", () => {
+  const state = new ActivityToastState();
+  const action = { id: "a", windowId: 1, state: "running", startedAt: 1 };
+  state.update({ active: [action], windowId: 1 }); state.pin("a");
+  state.update({ active: [], windowId: 2 });
+  assert.equal(state.visible(2).length, 0, "viewer moved into an unrelated window");
+  state.update({ active: [action], windowId: 1 }); state.pin("a");
+  state.update({ active: [], windowId: 1 });
+  assert.equal(state.visible(2).length, 0, "running target moved to a different window");
 });

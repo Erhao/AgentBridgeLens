@@ -9,6 +9,7 @@ export interface Activity {
   bridgeColor?: string;
   sequence?: number;
   tabId?: number;
+  windowId?: number;
   page?: string;
   site?: string;
   state: "running" | "completed" | "failed";
@@ -55,10 +56,22 @@ export function formatActivity(activity: Activity): string {
 }
 
 export interface ActivitySnapshot {
+  windowId?: number;
   active: Activity[];
   last?: Activity;
   recent?: Activity[];
   revision?: number;
+}
+
+/** Page overlays receive only activity belonging to their own Chrome window. */
+export function activitiesForWindow(snapshot: ActivitySnapshot, windowId: number): ActivitySnapshot {
+  windowId = Number.isInteger(windowId) && windowId >= 0 ? windowId : -1;
+  const matches = (activity: Activity) => windowId >= 0 && activity.windowId === windowId;
+  const recent = (snapshot.recent ?? []).filter(matches);
+  return {
+    windowId, revision: snapshot.revision, active: snapshot.active.filter(matches), recent,
+    last: snapshot.last && matches(snapshot.last) ? snapshot.last : recent.at(-1),
+  };
 }
 
 /** One card per call, ordered by creation, with independent completion deadlines. */
@@ -81,6 +94,11 @@ export class ActivityToastState {
     const latest = new Map<string, Activity>();
     for (const activity of [...(snapshot.recent ?? []), ...(snapshot.last ? [snapshot.last] : []), ...snapshot.active]) latest.set(activity.id, activity);
     for (const id of this.pinned.keys()) if (latest.has(id)) this.pinned.set(id, latest.get(id)!);
+    if (snapshot.windowId !== undefined) {
+      for (const [id, activity] of this.pinned) {
+        if (activity.windowId !== snapshot.windowId || (activity.state === "running" && !latest.has(id))) this.pinned.delete(id);
+      }
+    }
     for (const id of this.dismissed) if (!latest.has(id)) this.dismissed.delete(id);
   }
 

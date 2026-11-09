@@ -170,7 +170,9 @@ HTTP uses stateless Streamable HTTP with SSE responses to POST requests. It does
 
 ## Live activity cards
 
-Enable **“网页自动显示悬浮状态”** to display one card per action, stacked with the newest at the bottom. Running actions remain visible. Completed actions show a shrinking countdown bar and disappear after the configured retention period, which defaults to 2 seconds.
+Enable **“网页自动显示悬浮状态”** to show page activity only within the target page’s Chrome window. Switching tabs within that window keeps the activity visible; other windows do not receive it. Concurrent work in different windows stays separate. Running activity follows its target tab when it moves to another window; browser-wide management actions remain in the extension panel log.
+
+Each action gets a separate card, stacked with the newest at the bottom. Running actions remain visible. Completed actions show a shrinking countdown bar and disappear after the configured retention period, which defaults to 2 seconds.
 
 Hovering a card (or focusing its controls) pins it: the countdown stops and the progress bar disappears. Moving away does not restart the timer. Click that card’s **×** to dismiss it; other cards keep their own timers, and automatic prompts remain enabled. The header’s **“关闭自动提示”** button disables automatic page prompts until you enable them again in the extension.
 

@@ -76,6 +76,58 @@ try {
   assert.ok(client && client2, "both test bridges connected");
   const toast = a.locator("#bridgelens-activity-toast");
   const toastText = async () => (await toast.locator(".body").allTextContents()).join("\n");
+  // Two real Chrome windows: broadcasts and startup snapshots must stay scoped.
+  const firstWindowId = tabs.find((tab) => tab.id === aId).windowId;
+  const nextPage = context.waitForEvent("page");
+  const secondWindow = await worker.evaluate((url) => chrome.windows.create({ url, focused: false }), `${base}/a`);
+  const c = await nextPage; await c.waitForLoadState();
+  const cId = secondWindow.tabs[0].id;
+  const dPage = context.waitForEvent("page");
+  await worker.evaluate(({ windowId, url }) => chrome.tabs.create({ windowId, url, active: false }), { windowId: secondWindow.id, url: `${base}/b` });
+  const d = await dPage; await d.waitForLoadState();
+  const windowOneWork = call("replay_actions", { tabId: bId, actions: Array.from({ length: 32 }, () => ({ type: "scroll", x: 0, y: 0 })) });
+  await toast.waitFor();
+  await b.locator("#bridgelens-activity-toast").waitFor();
+  await c.waitForTimeout(150);
+  assert.equal(await c.locator("#bridgelens-activity-toast").count(), 0, "unrelated window does not show another window's action");
+  assert.equal(await d.locator("#bridgelens-activity-toast").count(), 0);
+  await c.reload();
+  await c.waitForTimeout(150);
+  assert.equal(await c.locator("#bridgelens-activity-toast").count(), 0, "initial get-activities snapshot is also window scoped");
+  const fPage = context.waitForEvent("page");
+  await worker.evaluate(({ windowId, url }) => chrome.tabs.create({ windowId, url, active: false }), { windowId: firstWindowId, url: `${base}/a` });
+  const f = await fPage; await f.waitForLoadState();
+  await f.locator("#bridgelens-activity-toast").waitFor();
+  const windowTwoWork = call("replay_actions", { tabId: cId, actions: Array.from({ length: 32 }, () => ({ type: "scroll", x: 0, y: 0 })) }, client2);
+  await c.locator("#bridgelens-activity-toast").waitFor();
+  assert.ok((await c.locator("#bridgelens-activity-toast .body").allTextContents()).every((text) => text.includes("第二 Bridge")));
+  assert.ok((await toast.locator(".body").allTextContents()).every((text) => text.includes("测试 Bridge")));
+  const overview = await context.newPage();
+  await overview.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
+  await overview.waitForFunction(() => {
+    const text = document.querySelector("#bl-activity").textContent;
+    return text.includes("测试 Bridge") && text.includes("第二 Bridge");
+  });
+  await overview.close();
+  await a.bringToFront();
+  await toast.locator(".card").first().hover();
+  await a.mouse.move(0, 0);
+  await worker.evaluate(({ tabId, windowId }) => chrome.tabs.move(tabId, { windowId, index: -1 }), { tabId: aId, windowId: secondWindow.id });
+  await a.waitForFunction(() => {
+    const cards = [...(document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelectorAll(".body") ?? [])];
+    return cards.length > 0 && cards.every((card) => card.textContent.includes("第二 Bridge"));
+  });
+  assert.equal(await toast.locator('[data-pinned="true"]').count(), 0, "moving a viewer drops pins from the old window");
+  await worker.evaluate(({ tabId, windowId }) => chrome.tabs.move(tabId, { windowId, index: -1 }), { tabId: bId, windowId: secondWindow.id });
+  await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelectorAll(".card").length === 2);
+  await f.locator("#bridgelens-activity-toast").waitFor({ state: "detached" });
+  await worker.evaluate(({ ids, windowId }) => chrome.tabs.move(ids, { windowId, index: -1 }), { ids: [aId, bId], windowId: firstWindowId });
+  await Promise.all([windowOneWork, windowTwoWork]);
+  await worker.evaluate((id) => chrome.windows.remove(id), secondWindow.id);
+  await f.close();
+  await toast.waitFor({ state: "detached", timeout: 4000 });
+  await a.bringToFront();
+
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   assert.equal(await settings.locator("#bl-toast-seconds").inputValue(), "2", "default completion delay is 2 seconds");
@@ -257,7 +309,7 @@ try {
   assert.equal(await a.locator("#bridgelens-reload-hint").count(), 0, "healthy recovered pages do not ask for a refresh");
   await recoveryPopup.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
   await toast.waitFor({ state: "detached" });
-  console.log("PASS: countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
+  console.log("PASS: multiple-window isolation, scoped startup snapshots, viewer/target movement, countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
 } finally {
   await context?.close();
   for (const socket of ws.clients) socket.terminate();

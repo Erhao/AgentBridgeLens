@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
-import type { IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { BridgeRequest, BridgeResponse } from "./protocol.js";
 
 export interface WsRelayOptions {
@@ -12,6 +12,7 @@ export interface WsRelayOptions {
 
 export class WsRelay {
   private wss: WebSocketServer;
+  private http: Server;
   private client: WebSocket | null = null;
   private token?: string;
   private pending = new Map<
@@ -22,9 +23,21 @@ export class WsRelay {
   constructor(options: WsRelayOptions) {
     const host = options.host || "127.0.0.1";
     this.token = options.token;
+    // Same listener as WebSocket: lets extension diagnostics see authentication
+    // failures that the browser's WebSocket API intentionally hides.
+    this.http = createServer((req, res) => {
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", "application/json");
+      if (req.url !== "/health" || req.method !== "GET") {
+        res.writeHead(404).end(JSON.stringify({ error: "Not found" }));
+      } else if (this.token && req.headers.authorization !== `Bearer ${this.token}`) {
+        res.writeHead(401).end(JSON.stringify({ error: "Unauthorized" }));
+      } else {
+        res.writeHead(200).end(JSON.stringify({ service: "AgentBridgeLens", status: "ok" }));
+      }
+    });
     this.wss = new WebSocketServer({
-      port: options.port,
-      host,
+      server: this.http,
       // Reject unauthorized clients during the HTTP upgrade, before the WS
       // handshake completes — so a bad token never reaches an open socket.
       verifyClient: (info, done) => {
@@ -33,6 +46,7 @@ export class WsRelay {
         done(false, 401, "Unauthorized");
       },
     });
+    this.http.listen(options.port, host);
 
     this.wss.on("connection", (ws, req: IncomingMessage) => {
       this.client = ws;
@@ -128,5 +142,6 @@ export class WsRelay {
 
   close() {
     this.wss.close();
+    this.http.close();
   }
 }

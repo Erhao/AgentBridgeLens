@@ -155,3 +155,93 @@ test("automatic accents are distinct, stable on reorder, and reject unsafe color
   for (const value of [0, 0.1, 7, 300]) assert.equal(config.toastSeconds(value), value);
   await assert.rejects(config.setBridgeProfiles([{ ...profiles[0], color: "invalid" }]), /强调色/);
 });
+
+function diagnosticsSetup(t, fetcher = async () => new Response('', { status: 426 })) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10000 });
+  t.mock.method(globalThis, 'fetch', fetcher);
+  const previous = globalThis.WebSocket;
+  class ConnectingSocket extends Socket { readyState = 0; }
+  globalThis.WebSocket = ConnectingSocket;
+  Socket.instances = [];
+  const manager = new BridgeConnections(async () => ({}));
+  t.after(() => { manager.update([], false); globalThis.WebSocket = previous; });
+  manager.update([profiles[0]], true);
+  return manager;
+}
+const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+
+test('connection status exposes attempts, retry time, and clears the error on recovery', async (t) => {
+  const manager = diagnosticsSetup(t);
+  assert.equal(manager.status()[0].state, 'connecting');
+  assert.equal(manager.status()[0].attempts, 1);
+  Socket.instances[0].onerror();
+  await settle();
+  const failed = manager.status()[0];
+  assert.equal(failed.state, 'retrying');
+  assert.equal(failed.nextRetryAt, 13000);
+  assert.match(failed.lastError, /握手失败/);
+  assert.match(failed.lastError, /旧版/);
+  assert.ok(!JSON.stringify(failed).includes('secret'));
+  t.mock.timers.tick(3000);
+  assert.equal(Socket.instances.length, 2);
+  assert.equal(manager.status()[0].attempts, 2);
+  const socket = Socket.instances[1];
+  socket.readyState = 1;
+  socket.onopen();
+  assert.equal(manager.status()[0].state, 'connected');
+  assert.equal(manager.status()[0].lastError, undefined);
+  assert.equal(manager.status()[0].nextRetryAt, undefined);
+  assert.equal(manager.status()[0].connectedAt, 13000);
+});
+
+test('failed handshake diagnoses HTTP 401 without exposing the token', async (t) => {
+  const manager = diagnosticsSetup(t, async (url, options) => {
+    assert.equal(url, 'http://localhost:19222/health');
+    assert.equal(options.headers.Authorization, 'Bearer a secret');
+    assert.equal(options.redirect, 'error');
+    return new Response('', { status: 401 });
+  });
+  Socket.instances[0].onerror();
+  await settle();
+  assert.match(manager.status()[0].lastError, /401.*Token/);
+  assert.ok(!JSON.stringify(manager.status()).includes('a secret'));
+});
+
+test('unreachable diagnostic endpoint reports uncertainty rather than claiming a token error', async (t) => {
+  const manager = diagnosticsSetup(t, async () => { throw new TypeError('Failed to fetch'); });
+  Socket.instances[0].onerror();
+  await settle();
+  assert.match(manager.status()[0].lastError, /无法访问/);
+  assert.doesNotMatch(manager.status()[0].lastError, /Token 错误/);
+});
+
+test('connection timeout cannot stall retries indefinitely', async (t) => {
+  const manager = diagnosticsSetup(t);
+  t.mock.timers.tick(10000);
+  assert.equal(manager.status()[0].state, 'retrying');
+  assert.match(manager.status()[0].lastError, /超时/);
+  t.mock.timers.tick(3000);
+  assert.equal(Socket.instances.length, 2);
+});
+
+test('manual reconnect affects one service and obsolete diagnostics cannot overwrite recovery', async (t) => {
+  let resolve;
+  const manager = diagnosticsSetup(t, () => new Promise((r) => { resolve = r; }));
+  manager.update(profiles, true);
+  const second = Socket.instances[1];
+  Socket.instances[0].onerror();
+  assert.equal(manager.reconnect('a'), true);
+  assert.equal(Socket.instances.length, 3);
+  assert.equal(Socket.instances[1], second);
+  const replacement = Socket.instances[2];
+  replacement.readyState = 1;
+  replacement.onopen();
+  resolve(new Response('', { status: 401 }));
+  await settle();
+  assert.equal(manager.status()[0].state, 'connected');
+  assert.equal(manager.status()[0].lastError, undefined);
+  assert.equal(manager.reconnect('unknown'), false);
+  manager.update([], false);
+  t.mock.timers.tick(30000);
+  assert.equal(Socket.instances.length, 3, 'revoking consent cancels timers');
+});

@@ -131,3 +131,35 @@ test("--version reports the installed package version without starting a server"
   } });
   assert.equal(actual.trim(), packageVersion);
 });
+
+test('WebSocket health endpoint diagnoses authentication without accepting bad WebSocket tokens', { timeout: 10000 }, async (t) => {
+  const port = await freePort();
+  const child = spawn(process.execPath, [entry], { env: { ...baseEnv,
+    BRIDGELENS_PORT: String(port), BRIDGELENS_TOKEN: 'diagnostic-secret' }, stdio: ['pipe', 'ignore', 'pipe'] });
+  t.after(() => child.kill('SIGKILL'));
+  await new Promise((resolve, reject) => {
+    child.stderr.on('data', (chunk) => { if (String(chunk).includes('WebSocket server listening')) resolve(); });
+    child.once('exit', (code) => reject(new Error(`Server exited: ${code}`)));
+  });
+  const url = `http://127.0.0.1:${port}/health`;
+  // The startup log precedes listen completion; wait for the actual listener.
+  let initial;
+  for (let i = 0; i < 50; i++) {
+    try { initial = await fetch(url); break; }
+    catch { await new Promise((resolve) => setTimeout(resolve, 20)); }
+  }
+  assert.equal(initial?.status, 401);
+  assert.equal((await fetch(url, { headers: { Authorization: 'Bearer wrong' } })).status, 401);
+  const response = await fetch(url, { headers: { Authorization: 'Bearer diagnostic-secret' } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await response.json(), { service: 'AgentBridgeLens', status: 'ok' });
+  assert.equal((await fetch(`http://127.0.0.1:${port}/missing`)).status, 404);
+  const rejected = new WebSocket(`ws://127.0.0.1:${port}/?token=wrong`);
+  rejected.on('error', () => {});
+  const status = await new Promise((resolve) => rejected.on('unexpected-response', (_req, res) => { resolve(res.statusCode); res.resume(); rejected.terminate(); }));
+  assert.equal(status, 401);
+  const accepted = new WebSocket(`ws://127.0.0.1:${port}/?token=diagnostic-secret`);
+  t.after(() => accepted.terminate());
+  await once(accepted, 'open');
+});

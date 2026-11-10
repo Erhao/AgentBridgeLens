@@ -320,6 +320,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message?.type === "bridgelens-get-status") {
     const bridges = connections.status().map((bridge) => ({ ...bridge, color: bridgeColors.get(bridge.id) ?? BRIDGE_COLORS[0] }));
     sendResponse({ connected: bridges.some((bridge) => bridge.connected), bridges });
+  } else if (message?.type === "bridgelens-reconnect") {
+    if (typeof message.id !== "string" || !sender.url?.startsWith(chrome.runtime.getURL(""))) {
+      sendResponse({ ok: false });
+      return;
+    }
+    // Re-read consent and saved profiles so a stale panel cannot revive a
+    // disabled service or a connection whose authorization was just revoked.
+    void connect().then(() => sendResponse({ ok: connections.reconnect(message.id) }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
   } else if (message?.type === "bridgelens-confirm-result") {
     const fn = pendingConfirms.get(message.cid);
     if (fn) {

@@ -34,6 +34,14 @@ Then install the **AgentBridgeLens Chrome extension** and open any page. The ext
 
 Single machine needs no env vars. For cross-machine, prefer an SSH tunnel (`ssh -L 19222:127.0.0.1:19222 …`) and keep the bridge on loopback.
 
+## Connection diagnostics
+
+The extension retries failed connections after 3 seconds and limits each connection attempt to 10 seconds. Its popup and side panel show attempt counts, retry timing and recent errors, with a per-service retry button.
+
+`GET /health` on the **WebSocket port** returns `{ "service": "AgentBridgeLens", "status": "ok" }`. When `BRIDGELENS_TOKEN` is set, supply it as `Authorization: Bearer <token>`; missing or incorrect credentials return HTTP 401. Responses are not cached. This endpoint does not accept credentials in the URL and does not replace WebSocket authentication.
+
+Update both the extension and Bridge to diagnose authentication failures. Older bridges return an unsupported-endpoint hint; the extension cannot infer a token mismatch from a generic browser WebSocket error alone.
+
 ## Streamable HTTP (remote MCP clients)
 
 Start the bridge as a standalone process instead of an MCP subprocess:

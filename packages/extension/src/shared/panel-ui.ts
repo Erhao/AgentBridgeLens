@@ -1,4 +1,5 @@
 import { formatActivity, type Activity } from "./activity";
+import type { BridgeStatus } from "../background/bridge-connections";
 /**
  * popup 与 side panel 共用的「连接配置 + 目标标签页」控件。
  * mountControls(root) 注入样式 + 构建 DOM + 接好全部逻辑。
@@ -17,6 +18,15 @@ const STYLE = `
   .bl-bridge-line { padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; }
   .bl-bridge-line.ok { background: #e3f9e5; color: #207227; }
   .bl-bridge-line.bad { background: #fff0f0; color: #ab1c1c; }
+  .bl-bridge-line.pending { background: #f0f2f5; color: #1f2933; }
+  .bl-bridge-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .bl-bridge-heading strong { font-size: 12px; font-weight: 600; min-width: 0; }
+  .bl-bridge-address, .bl-bridge-progress { color: #52606d; font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  .bl-bridge-error { margin-top: 4px; color: #ab1c1c; line-height: 1.5; }
+  .bl-reconnect { flex: none; min-height: 32px; padding: 4px 8px; border: 1px solid #cbd2d9; border-radius: 5px; background: white; color: #1f2933; font: inherit; cursor: pointer; }
+  .bl-reconnect:hover { border-color: #52606d; }
+  .bl-reconnect:focus-visible { outline: 2px solid #1f2933; outline-offset: 2px; }
+  .bl-reconnect:disabled { cursor: wait; color: #52606d; }
   .bl-connection-hint { color: #627080; padding: 2px 0; }
   .bl [hidden] { display: none !important; }
   .bl label { display: block; font-size: 12px; margin-bottom: 8px; }
@@ -242,7 +252,7 @@ export function mountControls(root: HTMLElement): void {
         statusEl.className = "status";
         return;
       }
-      const bridges = res.bridges as { id: string; name: string; url: string; connected: boolean; color?: string }[] | undefined;
+      const bridges = res.bridges as (BridgeStatus & { color?: string })[] | undefined;
       statusEl.replaceChildren();
       statusEl.className = "status";
       if (!bridges?.length) {
@@ -252,15 +262,60 @@ export function mountControls(root: HTMLElement): void {
       statusEl.classList.add("bl-bridges");
       for (const bridge of bridges) {
         const row = document.createElement("div");
-        row.className = `bl-bridge-line ${bridge.connected ? "ok" : "bad"}`;
+        row.className = `bl-bridge-line ${bridge.connected ? "ok" : bridge.state === "connecting" ? "pending" : "bad"}`;
         row.style.borderLeft = `4px solid ${bridge.color ?? BRIDGE_COLORS[0]}`;
-        row.textContent = `${bridge.connected ? "已连接" : "未连接"} · ${bridge.name} · ${bridge.url}`;
+        const heading = document.createElement("div");
+        heading.className = "bl-bridge-heading";
+        const title = document.createElement("strong");
+        title.textContent = `${bridge.connected ? "已连接" : bridge.state === "connecting" ? "连接中" : "等待重连"} · ${bridge.name}`;
+        heading.appendChild(title);
+        if (!bridge.connected) {
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "bl-reconnect";
+          retry.textContent = "立即重连";
+          retry.setAttribute("aria-label", `立即重连 ${bridge.name}`);
+          retry.addEventListener("click", async () => {
+            retry.disabled = true;
+            try {
+              const result = await chrome.runtime.sendMessage({ type: "bridgelens-reconnect", id: bridge.id });
+              if (!result?.ok) throw new Error("无法重连，请确认服务已启用且已授权。");
+              await refreshStatus();
+            } catch (error) {
+              retry.disabled = false;
+              const hint = document.createElement("div");
+              hint.className = "bl-bridge-error";
+              hint.textContent = error instanceof Error ? error.message : "重连失败，请重新打开面板。";
+              row.appendChild(hint);
+            }
+          });
+          heading.appendChild(retry);
+        }
+        row.appendChild(heading);
+        const address = document.createElement("div");
+        address.className = "bl-bridge-address";
+        address.textContent = bridge.url;
+        row.appendChild(address);
+        const progress = document.createElement("div");
+        progress.className = "bl-bridge-progress";
+        const time = (timestamp: number) => new Date(timestamp).toLocaleTimeString();
+        const next = bridge.nextRetryAt ? ` · ${Math.max(0, Math.ceil((bridge.nextRetryAt - Date.now()) / 1000))} 秒后重试` : "";
+        progress.textContent = bridge.connected
+          ? bridge.connectedAt ? `连接于 ${time(bridge.connectedAt)}` : "连接正常"
+          : `已尝试 ${bridge.attempts} 次${next}${bridge.lastAttemptAt ? ` · 最近尝试 ${time(bridge.lastAttemptAt)}` : ""}`;
+        row.appendChild(progress);
+        if (bridge.lastError) {
+          const error = document.createElement("div");
+          error.className = "bl-bridge-error";
+          error.textContent = `最近错误：${bridge.lastError}`;
+          row.appendChild(error);
+        }
         statusEl.appendChild(row);
       }
       if (bridges.some((bridge) => !bridge.connected)) {
         const hint = document.createElement("div");
         hint.className = "bl-connection-hint";
-        hint.textContent = "未连接的服务：请检查是否已启动，Host / Port / Token 是否一致，以及网络是否可达。";
+        hint.textContent = "已启用自动重连：失败后每 3 秒重试，每次连接最多等待 10 秒。";
         statusEl.appendChild(hint);
       }
     });
@@ -498,6 +553,6 @@ export function mountControls(root: HTMLElement): void {
   loadConfig();
   refreshStatus();
   renderTabs();
-  setInterval(refreshStatus, 2000);
+  setInterval(refreshStatus, 1000);
   setInterval(renderTabs, 2000);
 }

@@ -29,6 +29,79 @@ function scriptSummary(value: unknown): string {
     .trim().slice(0, 160);
 }
 
+const resultLabels: Record<string, string> = {
+  rowcount: "行数", count: "数量", total: "总数", matchedcount: "匹配数", elementcount: "元素数", requestcount: "请求数", errorcount: "错误数", visiblecount: "可见数",
+  storagecount: "存储数量", diskcount: "磁盘数量", volumecount: "卷数量", filecount: "文件数量", foldercount: "目录数量", nodecount: "节点数量", selectedcount: "已选数量", failedcount: "失败数量", successcount: "成功数量", warningcount: "警告数量",
+  totalbytes: "总容量", usedbytes: "已用容量", freebytes: "剩余容量", availablebytes: "可用容量", sizebytes: "大小",
+  totalcapacity: "总容量", usedcapacity: "已用容量", freecapacity: "剩余容量", totalsize: "总大小", usedsize: "已用大小", freesize: "剩余大小",
+  usedpercent: "使用率", usagepercent: "使用率", progresspercent: "进度",
+  status: "状态", statuscode: "状态码", state: "状态", view: "视图", mode: "模式", type: "类型",
+  loading: "正在加载", ready: "已就绪", enabled: "已启用", disabled: "已禁用", visible: "可见", selected: "已选中", active: "已激活", exists: "存在", empty: "为空", hasdata: "有数据", cansubmit: "可提交", success: "返回成功标志", ok: "返回正常标志",
+  rows: "表格行", items: "条目", records: "记录", files: "文件", folders: "目录", disks: "磁盘", storages: "存储", nodes: "节点", requests: "请求", errors: "错误", warnings: "警告", buttons: "按钮", links: "链接", charts: "图表",
+  space: "空间", usage: "用量", scan: "扫描", chart: "图表", pagination: "分页", summary: "汇总", capacity: "容量", page: "页码", pagesize: "每页数量", width: "宽度", height: "高度",
+};
+const resultStates: Record<string, string> = {
+  ready: "已就绪", loading: "加载中", pending: "等待中", idle: "空闲", running: "进行中", scanning: "扫描中", queued: "排队中", processing: "处理中", done: "已完成", completed: "已完成", success: "成功", failed: "失败", error: "出错", blocked: "被阻止", cancelled: "已取消", stopped: "已停止", empty: "为空", enabled: "已启用", disabled: "已禁用", visible: "可见", hidden: "隐藏", online: "在线", offline: "离线",
+  space: "空间视图", overview: "概览", table: "表格", list: "列表", chart: "图表", tree: "树形视图", scan: "扫描视图",
+};
+const normalizeKey = (key: string) => key.replace(/[_-]/g, "").toLowerCase();
+const privateResultKey = /token|password|passwd|secret|auth|cookie|credential|session|csrf|apikey|accesskey|private|phone|mobile|email|identity|cardnumber|账号|手机号|身份证|headers?|payload|body|html|text|content|message|description|stack|code|raw|凭证|密码|口令|密钥|正文/i;
+
+function formatBytes(bytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+  return `${Number(bytes.toFixed(2))} ${units[i]}`;
+}
+
+/** Interpret structure, not arbitrary prose. Never walk bodies, credentials or array items. */
+function scriptFacts(value: unknown): string[] {
+  const facts: string[] = [], seen = new Set<unknown>();
+  let visited = 0;
+  function walk(value: unknown, path: string[], depth: number) {
+    if (depth > 3 || seen.has(value) || visited >= 100 || facts.length >= 6) return;
+    const record = object(value);
+    seen.add(value);
+    for (const key in record) {
+      if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+      if (++visited > 100 || facts.length >= 6) break;
+      if (key.length > 32 || !/^[\p{L}\p{N}_-]+$/u.test(key)) continue;
+      const normalized = normalizeKey(key);
+      if (privateResultKey.test(key) && normalized !== "statuscode") continue;
+      if (normalized === "activitysummary") continue;
+      const label = Object.hasOwn(resultLabels, normalized) ? resultLabels[normalized] : key;
+      const item = record[key];
+      let detail = "";
+      if (typeof item === "number" && Number.isFinite(item) && Math.abs(item) <= Number.MAX_SAFE_INTEGER) {
+        if (!Object.hasOwn(resultLabels, normalized) && !/count|bytes|size|capacity|percent|total|used|free|available|duration|length|width|height|progress|index|ms$|容量|数量|大小|已用|剩余|进度|耗时|条数|页码|百分比/.test(normalized)) continue;
+        if (normalized.endsWith("bytes") && item >= 0) detail = formatBytes(item);
+        else if (normalized.endsWith("percent") && item >= 0 && item <= 100) detail = `${Number(item.toFixed(2))}%`;
+        else if (["status", "statuscode"].includes(normalized) && Number.isInteger(item) && item >= 100 && item <= 599) detail = `HTTP ${item}`;
+        else detail = String(item);
+      } else if (typeof item === "boolean") detail = item ? "是" : "否";
+      else if (Array.isArray(item)) detail = `${item.length} 项`;
+      else if (typeof item === "string") {
+        // Only known status words or unit-bearing measurements are copied from strings.
+        if (["status", "state", "view", "mode", "type"].includes(normalized)) detail = Object.hasOwn(resultStates, item.toLowerCase()) ? resultStates[item.toLowerCase()] : "";
+        else if (item.length <= 32 && /^(?:total|used|free|available)?(?:capacity|size)$/.test(normalized)
+          && /^\d+(?:\.\d+)?\s*(?:B|[KMGTPE]i?B|字节)$/i.test(item.trim())) detail = item.trim();
+      }
+      if (detail) {
+        const location = [...path, label].join(" / ");
+        // Keep the established short count wording for existing callers.
+        const legacy = depth === 0 && ["rowcount", "count", "total", "matchedcount", "elementcount", "requestcount", "errorcount", "visiblecount"].includes(normalized) && count(item);
+        const fact = legacy ? `${location} ${detail}` : `${location}：${detail}`;
+        if (facts.join("；").length + fact.length > 320) break;
+        facts.push(fact);
+      } else if (item && typeof item === "object") {
+        walk(item, ["data", "result", "metrics"].includes(normalized) ? path : [...path, label], depth + 1);
+      }
+    }
+  }
+  walk(value, [], 0);
+  return facts;
+}
+
 export function summarizeActivityResult(tool: string, result: unknown, failed = false): string {
   const data = object(result);
   if (failed || data.error !== undefined) {
@@ -45,13 +118,8 @@ export function summarizeActivityResult(tool: string, result: unknown, failed = 
     const summary = scriptSummary(object(value).activitySummary);
     if (summary) return summary;
     if (Array.isArray(value)) return `脚本返回 ${value.length} 个条目`;
-    const structured = object(value), fields: string[] = [];
-    for (const [key, label] of [["rowCount", "行数"], ["count", "数量"], ["total", "总数"], ["matchedCount", "匹配数"], ["elementCount", "元素数"], ["requestCount", "请求数"], ["errorCount", "错误数"], ["visibleCount", "可见数"]]) {
-      if (count(structured[key])) fields.push(`${label} ${structured[key]}`);
-    }
-    if (count(structured.status) && structured.status >= 100 && structured.status <= 599) fields.push(`HTTP ${structured.status}`);
-    if (fields.length) return `脚本返回：${fields.slice(0, 4).join("；")}`;
-    return "脚本执行完成，未提供结果说明";
+    const fields = scriptFacts(value);
+    return fields.length ? `脚本返回：${fields.join("；")}` : "";
   }
   if (tool === "get_network_requests" || tool === "get_cdp_network") {
     const requests = Array.isArray(result) ? result : Array.isArray(data.requests) ? data.requests : [];

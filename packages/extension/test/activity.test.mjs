@@ -219,10 +219,10 @@ test("local result summaries report actual counts without exposing script values
 });
 
 
-test("script display summaries explain actual outcomes while legacy values get plain wording", () => {
+test("script display summaries explain actual outcomes and omit meaningless result lines", () => {
   assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary: "找到 12 条记录，其中 3 条缺少图片", token: "private" } }), "找到 12 条记录，其中 3 条缺少图片");
-  for (const value of [{ status: "done" }, "private", 42, true, null, undefined]) {
-    assert.equal(summarizeActivityResult("execute_js", { value }), "脚本执行完成，未提供结果说明");
+  for (const value of [{ unknown: "private" }, "private", 42, true, null, undefined]) {
+    assert.equal(summarizeActivityResult("execute_js", { value }), "");
   }
   for (const activitySummary of ["", "  ", false, {}, []]) {
     assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary, rowCount: 3 } }), "脚本返回：行数 3");
@@ -232,4 +232,30 @@ test("script display summaries explain actual outcomes while legacy values get p
   assert.ok(!summary.includes("private") && !summary.includes("\n"));
   assert.equal(summarizeActivityResult("execute_js", { error: "TypeError: failure", value: { activitySummary: "成功" } }), "脚本执行发生 TypeError");
   assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary: "成功" } }, true), "页面脚本执行出错");
+});
+
+
+test("script facts expose nested capacity, state and counts without requiring an AI summary", () => {
+  const result = summarizeActivityResult("execute_js", { value: {
+    data: { space: { storageCount: 4, totalBytes: 2199023255552, usedBytes: 1649267441664, usagePercent: 75 }, scan: { status: "running", loading: false } },
+  } });
+  assert.equal(result, "脚本返回：空间 / 存储数量：4；空间 / 总容量：2 TiB；空间 / 已用容量：1.5 TiB；空间 / 使用率：75%；扫描 / 状态：进行中；扫描 / 正在加载：否");
+  assert.equal(summarizeActivityResult("execute_js", { value: { view: "space", hasData: false, rows: [] } }), "脚本返回：视图：空间视图；有数据：否；表格行：0 项");
+  assert.equal(summarizeActivityResult("execute_js", { value: { state: "done", total_size: "1.2 GiB", failed_count: 0, status: 503 } }), "脚本返回：状态：已完成；总大小：1.2 GiB；失败数量：0；状态：HTTP 503");
+  assert.equal(summarizeActivityResult("execute_js", { value: { 存储数量: 3, chart: { visible: false }, result: { total: 7 } } }), "脚本返回：存储数量：3；图表 / 可见：否；总数：7");
+});
+
+test("script facts are bounded and never traverse credentials, bodies or record values", () => {
+  const value = { password: { count: 99 }, authorization: 12345, cookie: true, apiKey: [1], innerText: "private", body: { count: 999 }, content: { count: 999 }, headers: { count: 999 }, code: { count: 999 }, state: "private", title: "private", rows: [{ password: "private" }], tokenCount: 998, ready: true };
+  assert.equal(summarizeActivityResult("execute_js", { value }), "脚本返回：表格行：1 项；已就绪：是");
+  assert.equal(summarizeActivityResult("execute_js", { value: { totalSize: "secret123 GiB" } }), "");
+  assert.equal(summarizeActivityResult("execute_js", { value: { status: "constructor", type: "__proto__", userId: 123456, phoneNumber: 13800000000, privateCount: 2, totalSize: "1".repeat(1000) + " GiB" } }), "");
+  assert.equal(summarizeActivityResult("execute_js", { value: { statusCode: 404, usagePercent: 0 } }), "脚本返回：状态码：HTTP 404；使用率：0%");
+  const circular = {}; circular.data = circular;
+  assert.equal(summarizeActivityResult("execute_js", { value: circular }), "");
+  assert.equal(summarizeActivityResult("execute_js", { value: { data: { data: { data: { data: { count: 88 } } } } } }), "");
+  assert.equal(summarizeActivityResult("execute_js", { value: { count: Infinity, total: NaN } }), "");
+  assert.equal(summarizeActivityResult("execute_js", { value: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`count${i}`, i])) }).split("；").length, 6);
+  const card = formatActivityCard({ tool: "execute_js", dimension: "页面脚本", bridgeName: "N100", state: "completed", startedAt: 0, finishedAt: 1, outcome: "" });
+  assert.ok(!card.includes("结果："), "unknown results do not pretend to be a useful explanation");
 });

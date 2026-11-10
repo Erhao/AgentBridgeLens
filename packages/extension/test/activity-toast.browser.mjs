@@ -223,9 +223,19 @@ try {
   await toast.waitFor({ state: "detached", timeout: 2500 });
 
   await call("execute_js", { tabId: aId, code: '({unknown:"private-legacy-result"})' });
-  await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent.includes("脚本执行完成，未提供结果说明"));
+  await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent.includes("已完成"));
+  assert.ok(!(await toastText()).includes("结果："));
+  assert.ok(!(await toastText()).includes("未提供结果说明"));
   assert.ok(!(await toastText()).includes("private-legacy-result"));
   assert.ok(!(await toastText()).includes("内容未展开"));
+  await toast.waitFor({ state: "detached", timeout: 2500 });
+
+  await call("execute_js", { tabId: aId, code: '({data:{space:{storageCount:4,totalBytes:2199023255552,usagePercent:75},scan:{status:"running"}}, body:{count:999}, token:"private-space-token"})' });
+  await a.waitForFunction(() => {
+    const text = document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent ?? "";
+    return text.includes("总容量：2 TiB") && text.includes("使用率：75%") && text.includes("扫描 / 状态：进行中");
+  });
+  assert.ok(!(await toastText()).includes("private-space-token") && !(await toastText()).includes("999"));
   await toast.waitFor({ state: "detached", timeout: 2500 });
 
   const settings2 = await context.newPage();

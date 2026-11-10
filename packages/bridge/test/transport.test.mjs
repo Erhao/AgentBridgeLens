@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:net";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { WebSocket } from "ws";
 
-const entry = fileURLToPath(new URL("../dist/index.js", import.meta.url));
+const entry = process.env.ABL_BRIDGE_ENTRY || fileURLToPath(new URL("../dist/index.js", import.meta.url));
+const packageVersion = JSON.parse(readFileSync(new URL("../package.json", pathToFileURL(entry)), "utf8")).version;
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("BRIDGELENS_")));
 async function freePort() {
   const server = createServer();
@@ -57,6 +59,7 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
     const client = new Client({ name: `test-${i}`, version: "1.0" });
     t.after(() => client.close());
     await client.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers } }));
+    assert.equal(client.getServerVersion().version, packageVersion);
     const { tools } = await client.listTools();
     assert.ok(tools.some((tool) => tool.name === "get_page_info"));
     const script = tools.find((tool) => tool.name === "execute_js");
@@ -120,4 +123,11 @@ test("HTTP refuses a non-loopback listener without authentication", { timeout: 1
   const child = spawn(process.execPath, [entry], { env: { ...baseEnv,
     BRIDGELENS_TRANSPORT: "http", BRIDGELENS_HTTP_HOST: "0.0.0.0" }, stdio: "ignore" });
   assert.notEqual((await once(child, "exit"))[0], 0);
+});
+
+test("--version reports the installed package version without starting a server", () => {
+  const actual = execFileSync(process.execPath, [entry, "--version"], { encoding: "utf8", env: {
+    ...baseEnv, BRIDGELENS_TRANSPORT: "invalid",
+  } });
+  assert.equal(actual.trim(), packageVersion);
 });

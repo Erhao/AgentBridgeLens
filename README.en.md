@@ -182,7 +182,14 @@ Cards show automatic action descriptions, target scope and locally generated out
 
 Scripts may return `{ activitySummary: "Found 12 records; 3 have no image", ...otherData }` for a readable result (up to 160 characters). Compute this text from actual results and exclude credentials or private data. Common credential assignments are redacted, but this is not a complete privacy filter. Missing summaries fall back to known counts, then a plain message that no result explanation was provided. No extra model call is made. Existing Bridges can relay this result object; rebuild and reconnect the Bridge to expose the updated authoring guidance to the AI.
 
-Automatic descriptions and summaries work with an extension-only update. AI explanations also require the updated Bridge source/build and an MCP reconnect so the client discovers the new field. GitHub releases currently publish the extension and updater; this does not imply that the npm Bridge package has been updated. After updating the source, run `pnpm --filter agentbridgelens build` and launch `packages/bridge/dist/index.js`.
+The extension and Bridge have independent releases. Use the prebuilt [Bridge 0.3.0 package](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.0) without building source:
+
+```bash
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.0/agentbridgelens-0.3.0.tgz
+agentbridgelens --version
+```
+
+Preserve host/port/token settings, restart the Bridge, and reconnect MCP to refresh tool definitions. If your service or MCP configuration launches an old source path or `npx agentbridgelens`, change it to the installed executable (find its absolute path with `command -v agentbridgelens`). Global installation does not rewrite existing launch configurations. npm publication status must be confirmed separately; the GitHub package does not depend on registry publishing permissions.
 
 
 ## 🧰 MCP tools

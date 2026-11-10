@@ -1,8 +1,14 @@
 #!/usr/bin/env node
+import { version } from "./version.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WsRelay } from "./ws-relay.js";
 import { createMcpServer } from "./mcp-server.js";
 import { startHttpServer } from "./http-server.js";
+
+if (process.argv.includes("--version")) {
+  console.log(version);
+  process.exit(0);
+}
 
 const WS_PORT = parseInt(process.env.BRIDGELENS_PORT || "19222", 10);
 // Default to loopback. Set BRIDGELENS_HOST=0.0.0.0 to let a Chrome extension on

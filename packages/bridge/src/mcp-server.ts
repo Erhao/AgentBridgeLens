@@ -1,10 +1,11 @@
+import { version } from "./version.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { WsRelay } from "./ws-relay.js";
 import { traceErrorToSource } from "./error-tracer.js";
 
 export function createMcpServer(relay: WsRelay): McpServer {
-  const server = new McpServer({ name: "AgentBridgeLens", version: "0.2.0" });
+  const server = new McpServer({ name: "AgentBridgeLens", version });
 
   // 目标标签页参数（页面类工具共用）：省略则用固定目标 / 当前激活页。
   const TAB = {

@@ -1,0 +1,80 @@
+name: Bridge release
+
+on:
+  push:
+    tags: ['bridge-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm --dir packages/bridge test
+      - run: node --test scripts/release/bridge.test.mjs
+      - name: Build versioned npm package and checksum
+        env:
+          BRIDGE_TAG: ${{ github.ref_name }}
+        run: node scripts/release/bridge.mjs "$BRIDGE_TAG"
+      - name: Test the installed release package outside the workspace
+        run: |
+          npm install --prefix "$RUNNER_TEMP/bridge-smoke" --ignore-scripts --package-lock=false "$GITHUB_WORKSPACE"/release/agentbridgelens-*.tgz
+          ABL_BRIDGE_ENTRY="$RUNNER_TEMP/bridge-smoke/node_modules/agentbridgelens/dist/index.js" node --test packages/bridge/test/transport.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-package
+          path: release/agentbridgelens-*
+          if-no-files-found: error
+
+  github-release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge-package
+          path: release
+      - name: Publish Bridge assets without changing the latest extension release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRIDGE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$BRIDGE_TAG" >/dev/null 2>&1; then
+            gh release create "$BRIDGE_TAG" --verify-tag --latest=false --title "Bridge ${BRIDGE_TAG#bridge-v}" --notes-file packages/bridge/CHANGELOG.md
+          fi
+          gh release upload "$BRIDGE_TAG" release/agentbridgelens-* --clobber
+
+  npm-publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge-package
+          path: release
+      - name: Publish tested package via npm trusted publishing
+        run: npm publish release/agentbridgelens-*.tgz --provenance --access public --registry=https://registry.npmjs.org

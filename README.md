@@ -182,7 +182,14 @@ HTTP 使用无状态 Streamable HTTP，支持 POST 的 SSE 响应；不提供旧
 
 脚本可以返回 `{ activitySummary: "找到 12 条记录，其中 3 条缺少图片", ...其他数据 }`，让悬浮窗直接显示易懂的结果说明（最多 160 字）。摘要应由脚本根据实际结果生成，不能包含凭证或隐私信息；常见凭证赋值会被遮盖，但这并不等于完整的隐私过滤。没有摘要时继续显示可识别的数量统计，无法概括则显示「脚本执行完成，未提供结果说明」。这不需要额外调用模型，旧 Bridge 也能透传这种返回对象；更新 Bridge 并重连 MCP 后，AI 才能看到新增的结果摘要编写提示。
 
-只有扩展更新时，自动文案和结果摘要即可生效。AI 说明还需要更新 **Bridge 源码/构建产物**并重新加载 MCP 连接，让客户端重新获取带 `activity` 字段的工具定义；目前 GitHub 自动发布的是扩展和更新工具，不能将它视为 npm Bridge 已同步更新。源代码更新后在仓库根目录运行 `pnpm --filter agentbridgelens build`，继续使用 `packages/bridge/dist/index.js` 启动 Bridge。
+扩展和 Bridge 分别发版。Bridge 正式安装包与升级说明见 [Bridge 0.3.0](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.0)，可直接安装，无需克隆源码或本地构建。更新后保留原 Host / Port / Token，重启 Bridge 并重新连接 MCP，让 AI 获取最新工具说明。npm 发布状态以 npm registry 为准，GitHub 安装包不依赖 npm 发布权限。
+
+```bash
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.0/agentbridgelens-0.3.0.tgz
+agentbridgelens --version
+```
+
+如果启动配置仍指向旧源码路径或 `npx agentbridgelens`，请将命令改为上述安装的 `agentbridgelens` 可执行文件（可用 `command -v agentbridgelens` 查询绝对路径），再重启原服务。全局安装不会自动改写原来的 MCP 或服务配置。
 
 
 ## 🧰 MCP 能力清单

@@ -182,10 +182,10 @@ Cards show automatic action descriptions, target scope and locally generated out
 
 Scripts may return `{ activitySummary: "Found 12 records; 3 have no image", ...otherData }` for a readable result (up to 160 characters). Compute this text from actual results and exclude credentials or private data. Common credential assignments are redacted, but this is not a complete privacy filter. Missing summaries fall back to known counts, then a plain message that no result explanation was provided. No extra model call is made. Existing Bridges can relay this result object; rebuild and reconnect the Bridge to expose the updated authoring guidance to the AI.
 
-The extension and Bridge have independent releases. Use the prebuilt [Bridge 0.3.0 package](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.0) without building source:
+The extension and Bridge have independent releases. Use the prebuilt [Bridge 0.3.1 package](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.1) without building source:
 
 ```bash
-npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.0/agentbridgelens-0.3.0.tgz
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.1/agentbridgelens-0.3.1.tgz
 agentbridgelens --version
 ```
 

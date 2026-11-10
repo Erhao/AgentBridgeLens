@@ -1,4 +1,6 @@
-## Bridge 0.3.0
+## Bridge 0.3.1
+
+Includes the Bridge 0.3.0 features below and corrects the npm release artifact path; 0.3.0 was published on GitHub only.
 
 - `execute_js` accepts an optional `activity` explanation (up to 80 characters).
 - Tool guidance asks scripts to compute an `activitySummary` from actual results for readable on-page outcomes (requires extension 1.8.1+).
@@ -11,10 +13,10 @@
 GitHub release package (available independently of npm publication):
 
 ```bash
-npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.0/agentbridgelens-0.3.0.tgz
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.1/agentbridgelens-0.3.1.tgz
 agentbridgelens --version
 ```
 
 Keep the original environment settings and restart the Bridge with your existing service manager. Reconnect the MCP client to refresh its tool list. If the service launches `node /path/to/old/dist/index.js` or `npx agentbridgelens`, change that command to the installed `agentbridgelens` executable; otherwise it continues running its previous source/package. No Chrome Bridge profile needs to be re-entered.
 
-After npm publication is confirmed, npm users can select `agentbridgelens@0.3.0`. A GitHub release alone does not update the npm registry.
+After npm publication is confirmed, npm users can select `agentbridgelens@0.3.1`. A GitHub release alone does not update the npm registry.

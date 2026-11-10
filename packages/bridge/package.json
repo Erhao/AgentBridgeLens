@@ -1,6 +1,6 @@
 {
   "name": "agentbridgelens",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server bridging AI coding agents to a real Chrome browser via the AgentBridgeLens extension — DOM inspection, screenshots, network/console capture, source-map tracing, visual overlays, multi-tab targeting.",
   "type": "module",
   "bin": {

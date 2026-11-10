@@ -34,6 +34,8 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/bridge-smoke" --ignore-scripts --package-lock=false "$GITHUB_WORKSPACE"/release/agentbridgelens-*.tgz
           ABL_BRIDGE_ENTRY="$RUNNER_TEMP/bridge-smoke/node_modules/agentbridgelens/dist/index.js" node --test packages/bridge/test/transport.test.mjs
+      - name: Verify npm accepts the release tarball
+        run: npm publish "$GITHUB_WORKSPACE"/release/agentbridgelens-*.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
       - uses: actions/upload-artifact@v4
         with:
           name: bridge-package
@@ -77,4 +79,4 @@ jobs:
           name: bridge-package
           path: release
       - name: Publish tested package via npm trusted publishing
-        run: npm publish release/agentbridgelens-*.tgz --provenance --access public --registry=https://registry.npmjs.org
+        run: npm publish "$GITHUB_WORKSPACE"/release/agentbridgelens-*.tgz --provenance --access public --registry=https://registry.npmjs.org

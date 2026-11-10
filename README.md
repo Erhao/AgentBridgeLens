@@ -182,10 +182,10 @@ HTTP 使用无状态 Streamable HTTP，支持 POST 的 SSE 响应；不提供旧
 
 脚本可以返回 `{ activitySummary: "找到 12 条记录，其中 3 条缺少图片", ...其他数据 }`，让悬浮窗直接显示易懂的结果说明（最多 160 字）。摘要应由脚本根据实际结果生成，不能包含凭证或隐私信息；常见凭证赋值会被遮盖，但这并不等于完整的隐私过滤。没有摘要时继续显示可识别的数量统计，无法概括则显示「脚本执行完成，未提供结果说明」。这不需要额外调用模型，旧 Bridge 也能透传这种返回对象；更新 Bridge 并重连 MCP 后，AI 才能看到新增的结果摘要编写提示。
 
-扩展和 Bridge 分别发版。Bridge 正式安装包与升级说明见 [Bridge 0.3.0](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.0)，可直接安装，无需克隆源码或本地构建。更新后保留原 Host / Port / Token，重启 Bridge 并重新连接 MCP，让 AI 获取最新工具说明。npm 发布状态以 npm registry 为准，GitHub 安装包不依赖 npm 发布权限。
+扩展和 Bridge 分别发版。Bridge 正式安装包与升级说明见 [Bridge 0.3.1](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.1)，可直接安装，无需克隆源码或本地构建。更新后保留原 Host / Port / Token，重启 Bridge 并重新连接 MCP，让 AI 获取最新工具说明。npm 发布状态以 npm registry 为准，GitHub 安装包不依赖 npm 发布权限。
 
 ```bash
-npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.0/agentbridgelens-0.3.0.tgz
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.1/agentbridgelens-0.3.1.tgz
 agentbridgelens --version
 ```
 

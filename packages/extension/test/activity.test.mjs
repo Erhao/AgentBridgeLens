@@ -217,3 +217,19 @@ test("local result summaries report actual counts without exposing script values
   assert.equal(summarizeActivityResult("inspect_element", { error: "Element not found: private selector" }), "未找到目标元素");
   assert.equal(summarizeActivityResult("execute_js", { error: "private secret" }), "页面脚本执行出错");
 });
+
+
+test("script display summaries explain actual outcomes while legacy values get plain wording", () => {
+  assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary: "找到 12 条记录，其中 3 条缺少图片", token: "private" } }), "找到 12 条记录，其中 3 条缺少图片");
+  for (const value of [{ status: "done" }, "private", 42, true, null, undefined]) {
+    assert.equal(summarizeActivityResult("execute_js", { value }), "脚本执行完成，未提供结果说明");
+  }
+  for (const activitySummary of ["", "  ", false, {}, []]) {
+    assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary, rowCount: 3 } }), "脚本返回：行数 3");
+  }
+  assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary: "长".repeat(200) } }).length, 160);
+  const summary = summarizeActivityResult("execute_js", { value: { activitySummary: '完成\n检查 token="private token" Bearer private-bearer' } });
+  assert.ok(!summary.includes("private") && !summary.includes("\n"));
+  assert.equal(summarizeActivityResult("execute_js", { error: "TypeError: failure", value: { activitySummary: "成功" } }), "脚本执行发生 TypeError");
+  assert.equal(summarizeActivityResult("execute_js", { value: { activitySummary: "成功" } }, true), "页面脚本执行出错");
+});

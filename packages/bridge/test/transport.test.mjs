@@ -60,6 +60,7 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
     const { tools } = await client.listTools();
     assert.ok(tools.some((tool) => tool.name === "get_page_info"));
     const script = tools.find((tool) => tool.name === "execute_js");
+    assert.match(script.inputSchema.properties.code.description, /activitySummary/);
     assert.equal(script.inputSchema.properties.activity.maxLength, 80);
     assert.ok(!script.inputSchema.required.includes("activity"));
     assert.ok(tools.filter((tool) => tool.name !== "execute_js").every((tool) => !tool.inputSchema.properties.activity), "ordinary tools add no explanation-token requirement");

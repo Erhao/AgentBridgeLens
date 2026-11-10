@@ -1,4 +1,4 @@
-/** Summaries use counts/types and known numeric fields, never raw strings or bodies. */
+/** Only explicit display summaries and known structural statistics reach the cards. */
 function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -20,6 +20,15 @@ function treeSize(value: unknown): string {
   return `${queue.length ? "至少 " : ""}${total}`;
 }
 
+/** This opt-in field is display text, not a dump of the returned object. */
+function scriptSummary(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ")
+    .replace(/\bBearer\s+[^\s]+/gi, "Bearer [已隐藏]")
+    .replace(/((?:token|password|secret|authorization|cookie|api[-_]?key)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1[已隐藏]")
+    .trim().slice(0, 160);
+}
+
 export function summarizeActivityResult(tool: string, result: unknown, failed = false): string {
   const data = object(result);
   if (failed || data.error !== undefined) {
@@ -33,6 +42,8 @@ export function summarizeActivityResult(tool: string, result: unknown, failed = 
   }
   if (tool === "execute_js") {
     const value = data.value;
+    const summary = scriptSummary(object(value).activitySummary);
+    if (summary) return summary;
     if (Array.isArray(value)) return `脚本返回 ${value.length} 个条目`;
     const structured = object(value), fields: string[] = [];
     for (const [key, label] of [["rowCount", "行数"], ["count", "数量"], ["total", "总数"], ["matchedCount", "匹配数"], ["elementCount", "元素数"], ["requestCount", "请求数"], ["errorCount", "错误数"], ["visibleCount", "可见数"]]) {
@@ -40,12 +51,7 @@ export function summarizeActivityResult(tool: string, result: unknown, failed = 
     }
     if (count(structured.status) && structured.status >= 100 && structured.status <= 599) fields.push(`HTTP ${structured.status}`);
     if (fields.length) return `脚本返回：${fields.slice(0, 4).join("；")}`;
-    if (value === null) return "脚本返回空值 null";
-    if (value === undefined) return "脚本已结束，未返回可序列化的值";
-    if (typeof value === "boolean") return `脚本返回布尔值 ${value}`;
-    if (typeof value === "string") return "脚本返回文本，原文未展开";
-    if (typeof value === "number") return "脚本返回数值，原值未展开";
-    return "脚本返回对象，内容未展开";
+    return "脚本执行完成，未提供结果说明";
   }
   if (tool === "get_network_requests" || tool === "get_cdp_network") {
     const requests = Array.isArray(result) ? result : Array.isArray(data.requests) ? data.requests : [];

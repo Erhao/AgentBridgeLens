@@ -207,19 +207,25 @@ try {
 
   const scriptInfo = await call("execute_js", {
     tabId: aId,
-    code: '({elementCount:document.querySelectorAll("button").length, token:"private-result-value"})',
+    code: '(() => { const buttons = [...document.querySelectorAll("button")]; return {activitySummary:`找到 ${buttons.length} 个按钮，其中 ${buttons.filter(b => b.disabled).length} 个不可用`, elementCount:buttons.length, token:"private-result-value"}; })()',
     activity: "统计页面按钮数量，确认提交入口是否存在",
   });
   assert.equal(scriptInfo.value.elementCount, 1);
   await a.waitForFunction(() => {
     const text = document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent ?? "";
-    return text.includes("AI 说明：统计页面按钮数量") && text.includes("脚本返回：元素数 1");
+    return text.includes("AI 说明：统计页面按钮数量") && text.includes("结果：找到 1 个按钮，其中 0 个不可用");
   });
   if (process.env.ABL_ACTIVITY_DETAIL_SCREENSHOT) await a.screenshot({ path: process.env.ABL_ACTIVITY_DETAIL_SCREENSHOT });
   assert.ok(!(await toastText()).includes("private-result-value"));
   assert.ok(!(await toastText()).includes("工具："), "technical tool names are collapsed by default");
   assert.match(await toast.locator(".technical pre").last().textContent(), /execute_js/);
   await a.mouse.move(0, 0);
+  await toast.waitFor({ state: "detached", timeout: 2500 });
+
+  await call("execute_js", { tabId: aId, code: '({unknown:"private-legacy-result"})' });
+  await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.textContent.includes("脚本执行完成，未提供结果说明"));
+  assert.ok(!(await toastText()).includes("private-legacy-result"));
+  assert.ok(!(await toastText()).includes("内容未展开"));
   await toast.waitFor({ state: "detached", timeout: 2500 });
 
   const settings2 = await context.newPage();

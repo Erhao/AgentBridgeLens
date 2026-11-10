@@ -118,12 +118,12 @@ The updated `execute_js` tool accepts an optional `activity` string of 1–80 ch
 
 ```json
 {
-  "code": "({rowCount: document.querySelectorAll('tbody tr').length})",
+  "code": "(() => { const rowCount = document.querySelectorAll('tbody tr').length; return {rowCount, activitySummary: `找到 ${rowCount} 条表格记录`}; })()",
   "activity": "统计资源列表行数，检查筛选后是否为空",
   "tabId": 123
 }
 ```
 
-The extension labels this text as an AI explanation and separately displays actual result statistics. Existing calls containing only `code` remain valid. For script results, simple structural counters such as `rowCount`, `count`, `matchedCount`, `errorCount` or an array length can be summarized; arbitrary strings, object values and raw code are not shown automatically.
+The extension labels this text as an AI explanation and separately displays actual result statistics. Existing calls containing only `code` remain valid. For script results, simple structural counters such as `rowCount`, `count`, `matchedCount`, `errorCount` or an array length can be summarized; arbitrary strings, object values and raw code are not shown automatically. Prefer returning an object with an `activitySummary` string computed from the actual result (up to 160 characters). This opt-in text appears directly as the card’s result; keep it free of credentials and private data. Common credential assignments are redacted, but this is not a complete privacy filter. Blank or invalid summaries fall back to structural counters, then “脚本执行完成，未提供结果说明”. Failed calls display their error outcome rather than a success summary. No extra model request is needed.
 
 To use the new field from this repository, build the updated Bridge with `pnpm --filter agentbridgelens build`, keep your existing host/port/token environment settings, and restart the MCP connection using `node /absolute/path/to/AgentBridgeLens/packages/bridge/dist/index.js`. Refresh the client's MCP tool list. The extension ZIP updater does not update the Bridge, and a GitHub extension release does not publish a new npm Bridge version.

@@ -180,6 +180,8 @@ Pinned cards stay on the current page and survive temporary screenshot suppressi
 
 Cards show automatic action descriptions, target scope and locally generated outcome statistics, such as log counts, HTTP errors and replayed steps. Expand **“技术细节”** for tool names and tab IDs. Only `execute_js` adds an optional `activity` string (up to 80 characters), displayed explicitly as an AI-provided explanation. Ordinary tools require no extra narration, and no additional model request is made for summaries. Raw scripts, full responses and log contents are not copied into the cards.
 
+Scripts may return `{ activitySummary: "Found 12 records; 3 have no image", ...otherData }` for a readable result (up to 160 characters). Compute this text from actual results and exclude credentials or private data. Common credential assignments are redacted, but this is not a complete privacy filter. Missing summaries fall back to known counts, then a plain message that no result explanation was provided. No extra model call is made. Existing Bridges can relay this result object; rebuild and reconnect the Bridge to expose the updated authoring guidance to the AI.
+
 Automatic descriptions and summaries work with an extension-only update. AI explanations also require the updated Bridge source/build and an MCP reconnect so the client discovers the new field. GitHub releases currently publish the extension and updater; this does not imply that the npm Bridge package has been updated. After updating the source, run `pnpm --filter agentbridgelens build` and launch `packages/bridge/dist/index.js`.
 
 

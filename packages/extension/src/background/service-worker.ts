@@ -7,7 +7,7 @@ import { summarizeActivityResult } from "../shared/activity-summary";
 import { describeActivity, activitiesForWindow, type Activity } from "../shared/activity";
 import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
 import { ContentConnection } from "./content-connection";
-import { BridgeConnections, type BridgeSource } from "./bridge-connections";
+import { BridgeConnections, type BridgeSource, type BridgeRetryState } from "./bridge-connections";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 import {
   startCdpNetwork,
@@ -25,7 +25,18 @@ import {
   registerTabListeners,
 } from "./tabs";
 
-const connections = new BridgeConnections(handleToolCall);
+const retryState: Record<string, BridgeRetryState> = {};
+let profileKeys = new Map<string, string>();
+let retryStateRestored = false;
+let retrySave = Promise.resolve();
+const storedRetryState = chrome.storage.session.get("connectionRetryState").catch(() => ({}));
+const connections = new BridgeConnections(handleToolCall, retryState, (state) => {
+  // Bind saved deadlines to the actual connection settings without persisting tokens.
+  const snapshot = Object.fromEntries(Object.entries(state).map(([id, value]) => [
+    id, { ...value, profileKey: profileKeys.get(id) },
+  ]));
+  retrySave = retrySave.then(() => chrome.storage.session.set({ connectionRetryState: snapshot })).catch(() => {});
+});
 const contentConnection = new ContentConnection();
 chrome.tabs.onRemoved.addListener((tabId) => contentConnection.forget(tabId));
 chrome.tabs.onAttached.addListener((tabId, info) => {
@@ -38,10 +49,28 @@ let configRevision = 0;
 let bridgeColors = new Map<string, string>();
 async function connect() {
   const revision = ++configRevision;
-  const [profiles, { bridgeConsent }] = await Promise.all([
-    getBridgeProfiles(), chrome.storage.local.get("bridgeConsent"),
+  const [profiles, { bridgeConsent }, stored] = await Promise.all([
+    getBridgeProfiles(), chrome.storage.local.get("bridgeConsent"), storedRetryState,
   ]);
+  const keys = await Promise.all(profiles.map(async (profile) => {
+    const bytes = new TextEncoder().encode(JSON.stringify([profile.host, profile.port, profile.token]));
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return [profile.id, Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")] as const;
+  }));
   if (revision === configRevision) {
+    profileKeys = new Map(keys);
+    if (!retryStateRestored) {
+      const saved = (stored as { connectionRetryState?: Record<string, BridgeRetryState & { profileKey: string }> }).connectionRetryState;
+      for (const profile of profiles) {
+        const value = saved?.[profile.id];
+        if (value && value.profileKey === profileKeys.get(profile.id) &&
+            Number.isSafeInteger(value.failures) && value.failures > 0 &&
+            Number.isSafeInteger(value.attempts) && value.attempts > 0 && Number.isFinite(value.nextRetryAt)) {
+          retryState[profile.id] = { failures: value.failures, attempts: value.attempts, nextRetryAt: value.nextRetryAt };
+        }
+      }
+      retryStateRestored = true;
+    }
     bridgeColors = new Map(profiles.map((profile) => [profile.id, profile.color ?? BRIDGE_COLORS[0]]));
     connections.update(profiles, bridgeConsent === true);
     for (const activity of [...activeActivities.values(), ...recentActivities]) {
@@ -341,7 +370,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Keepalive：MV3 Service Worker 闲置 ~30s 后会休眠，基于 setTimeout 的重连定时器会随之失效。
 // chrome.alarms 即使在 SW 休眠时也能按时唤醒它；每次触发都重新执行顶层代码并尝试重连
-// （connect() 在已连接时是空操作），从而保证断线后能自动恢复，无需用户手动唤醒扩展。
+// connect() 恢复 session 中的退避截止时间；唤醒不会绕过尚未到期的等待。
 chrome.alarms.create("bridgelens-keepalive", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "bridgelens-keepalive") connect();

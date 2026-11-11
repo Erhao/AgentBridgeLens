@@ -315,7 +315,7 @@ export function mountControls(root: HTMLElement): void {
       if (bridges.some((bridge) => !bridge.connected)) {
         const hint = document.createElement("div");
         hint.className = "bl-connection-hint";
-        hint.textContent = "已启用自动重连：失败后每 3 秒重试，每次连接最多等待 10 秒。";
+        hint.textContent = "已启用自动重连：失败后等待 3 秒起，每次翻倍，最长 600 秒；每次连接最多等待 10 秒。";
         statusEl.appendChild(hint);
       }
     });

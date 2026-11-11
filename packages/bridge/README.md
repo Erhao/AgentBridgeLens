@@ -36,7 +36,7 @@ Single machine needs no env vars. For cross-machine, prefer an SSH tunnel (`ssh 
 
 ## Connection diagnostics
 
-The extension retries failed connections after 3 seconds and limits each connection attempt to 10 seconds. Its popup and side panel show attempt counts, retry timing and recent errors, with a per-service retry button.
+The extension retries failed connections with exponential backoff (3, 6, 12, 24… seconds, capped at 600 seconds) and limits each connection attempt to 10 seconds. Each service has its own backoff; successful connections and manual retry reset it. Retry deadlines survive extension worker suspension, and keepalive wakeups do not bypass them. Its popup and side panel show attempt counts, retry timing and recent errors, with a per-service retry button.
 
 `GET /health` on the **WebSocket port** returns `{ "service": "AgentBridgeLens", "status": "ok" }`. When `BRIDGELENS_TOKEN` is set, supply it as `Authorization: Bearer <token>`; missing or incorrect credentials return HTTP 401. Responses are not cached. This endpoint does not accept credentials in the URL and does not replace WebSocket authentication.
 

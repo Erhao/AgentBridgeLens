@@ -245,3 +245,74 @@ test('manual reconnect affects one service and obsolete diagnostics cannot overw
   t.mock.timers.tick(30000);
   assert.equal(Socket.instances.length, 3, 'revoking consent cancels timers');
 });
+
+test('failed connections back off exponentially to 600 seconds without waking early', async (t) => {
+  const manager = diagnosticsSetup(t);
+  for (const delay of [3000, 6000, 12000, 24000, 48000, 96000, 192000, 384000, 600000, 600000]) {
+    Socket.instances.at(-1).onerror();
+    await settle();
+    const state = manager.status()[0];
+    assert.equal(state.nextRetryAt - Date.now(), delay);
+    const before = Socket.instances.length;
+    t.mock.timers.tick(delay - 1);
+    manager.update([profiles[0]], true); // configuration refresh / keepalive
+    assert.equal(Socket.instances.length, before, 'refresh must preserve the retry deadline');
+    t.mock.timers.tick(1);
+    assert.equal(Socket.instances.length, before + 1);
+  }
+});
+
+test('successful connection resets only its own backoff; manual retry starts a fresh cycle', async (t) => {
+  const manager = diagnosticsSetup(t);
+  manager.update(profiles, true);
+  Socket.instances[0].onerror();
+  Socket.instances[1].onerror();
+  t.mock.timers.tick(3000);
+  const a = Socket.instances[2], b = Socket.instances[3];
+  a.onerror(); b.onerror();
+  assert.equal(manager.status()[0].nextRetryAt - Date.now(), 6000);
+  assert.equal(manager.status()[1].nextRetryAt - Date.now(), 6000);
+  manager.reconnect('a');
+  const manual = Socket.instances.at(-1);
+  manual.onerror();
+  assert.equal(manager.status()[0].nextRetryAt - Date.now(), 3000);
+  assert.equal(manager.status()[1].nextRetryAt - Date.now(), 6000);
+  t.mock.timers.tick(3000);
+  const recovered = Socket.instances.at(-1);
+  recovered.readyState = 1;
+  recovered.onopen();
+  recovered.close();
+  assert.equal(manager.status()[0].nextRetryAt - Date.now(), 3000);
+  assert.equal(manager.status()[1].nextRetryAt - Date.now(), 3000);
+});
+
+test('retry state survives a new worker instance and clears on recovery, profile changes or consent removal', async (t) => {
+  diagnosticsSetup(t).update([], false);
+  const state = { a: { failures: 9, attempts: 9, nextRetryAt: Date.now() + 600000 } };
+  const saved = [];
+  const manager = new BridgeConnections(async () => ({}), state, (snapshot) => saved.push(structuredClone(snapshot)));
+  t.after(() => manager.update([], false));
+  const before = Socket.instances.length;
+  manager.update([profiles[0]], true);
+  assert.equal(Socket.instances.length, before, 'worker startup respects the saved deadline');
+  assert.equal(manager.status()[0].attempts, 9);
+  assert.equal(manager.status()[0].state, 'retrying');
+  t.mock.timers.tick(599999);
+  assert.equal(Socket.instances.length, before);
+  t.mock.timers.tick(1);
+  assert.equal(Socket.instances.length, before + 1);
+  const socket = Socket.instances.at(-1);
+  socket.onerror();
+  assert.equal(saved.at(-1).a.nextRetryAt - Date.now(), 600000);
+  manager.reconnect('a');
+  const fresh = Socket.instances.at(-1);
+  fresh.readyState = 1; fresh.onopen();
+  assert.equal(saved.at(-1).a, undefined);
+  fresh.close();
+  assert.equal(saved.at(-1).a.nextRetryAt - Date.now(), 3000);
+  manager.update([{ ...profiles[0], token: 'updated' }], true);
+  assert.equal(saved.at(-1).a, undefined, 'new credentials bypass a saved failure');
+  Socket.instances.at(-1).onerror();
+  manager.update([], false);
+  assert.deepEqual(saved.at(-1), {});
+});

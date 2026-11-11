@@ -16,10 +16,17 @@ interface Connection {
   timeout?: ReturnType<typeof setTimeout>;
   diagnostic?: AbortController;
   attempts: number;
+  failures: number;
   lastAttemptAt?: number;
   connectedAt?: number;
   nextRetryAt?: number;
   lastError?: string;
+}
+
+export interface BridgeRetryState {
+  failures: number;
+  attempts: number;
+  nextRetryAt: number;
 }
 
 export interface BridgeStatus {
@@ -39,7 +46,11 @@ export interface BridgeStatus {
 export class BridgeConnections {
   private connections = new Map<string, Connection>();
 
-  constructor(private handle: (request: BridgeRequest, source: BridgeSource) => Promise<unknown>) {}
+  constructor(
+    private handle: (request: BridgeRequest, source: BridgeSource) => Promise<unknown>,
+    private retryState: Record<string, BridgeRetryState> = {},
+    private onRetryStateChange: (state: Record<string, BridgeRetryState>) => void = () => {},
+  ) {}
 
   update(profiles: BridgeProfile[], consent: boolean) {
     const desired = new Map(profiles.filter((p) => consent && p.enabled).map((p) => [p.id, p]));
@@ -48,13 +59,27 @@ export class BridgeConnections {
       if (!profile || profile.host !== connection.profile.host || profile.port !== connection.profile.port || profile.token !== connection.profile.token) {
         this.connections.delete(id);
         this.close(connection);
+        this.resetBackoff(connection);
       } else {
         // Presentation changes must not interrupt a socket or in-flight calls.
         connection.profile = profile;
       }
     }
+    for (const id of Object.keys(this.retryState)) {
+      if (!desired.has(id)) {
+        delete this.retryState[id];
+        this.onRetryStateChange(structuredClone(this.retryState));
+      }
+    }
     for (const [id, profile] of desired) {
-      if (!this.connections.has(id)) this.connections.set(id, { profile, attempts: 0 });
+      if (!this.connections.has(id)) {
+        const saved = this.retryState[id];
+        const connection: Connection = { profile, attempts: saved?.attempts ?? 0, failures: saved?.failures ?? 0 };
+        this.connections.set(id, connection);
+        if (saved && saved.nextRetryAt > Date.now()) {
+          this.scheduleRetry(connection, Math.min(saved.nextRetryAt, Date.now() + 600_000));
+        }
+      }
       this.connect(this.connections.get(id)!);
     }
   }
@@ -72,6 +97,7 @@ export class BridgeConnections {
     const connection = this.connections.get(id);
     if (!connection) return false;
     this.close(connection);
+    this.resetBackoff(connection);
     this.connect(connection);
     return true;
   }
@@ -132,6 +158,7 @@ export class BridgeConnections {
       connection.timeout = undefined;
       connection.connectedAt = Date.now();
       connection.lastError = undefined;
+      this.resetBackoff(connection);
     };
     socket.onmessage = async (event) => {
       let request: BridgeRequest;
@@ -194,11 +221,28 @@ export class BridgeConnections {
 
   private retry(connection: Connection) {
     if (this.connections.get(connection.profile.id) !== connection || connection.retry) return;
-    connection.nextRetryAt = Date.now() + 3000;
+    connection.failures++;
+    const delay = Math.min(3000 * 2 ** Math.min(connection.failures - 1, 8), 600_000);
+    const nextRetryAt = Date.now() + delay;
+    this.retryState[connection.profile.id] = { failures: connection.failures, attempts: connection.attempts, nextRetryAt };
+    this.onRetryStateChange(structuredClone(this.retryState));
+    this.scheduleRetry(connection, nextRetryAt);
+  }
+
+  private resetBackoff(connection: Connection) {
+    connection.failures = 0;
+    if (this.retryState[connection.profile.id]) {
+      delete this.retryState[connection.profile.id];
+      this.onRetryStateChange(structuredClone(this.retryState));
+    }
+  }
+
+  private scheduleRetry(connection: Connection, nextRetryAt: number) {
+    connection.nextRetryAt = nextRetryAt;
     connection.retry = setTimeout(() => {
       connection.retry = undefined;
       connection.nextRetryAt = undefined;
       this.connect(connection);
-    }, 3000);
+    }, Math.max(0, nextRetryAt - Date.now()));
   }
 }

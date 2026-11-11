@@ -58,6 +58,26 @@ try {
   assert.ok((await status()).bridges[0].attempts > before);
   await page.waitForTimeout(3200);
   assert.ok((await status()).bridges[0].attempts > before + 1, 'automatic retry continues');
+  // A suspended worker must resume its existing backoff, rather than reconnect immediately.
+  const checkpoint = (await status()).bridges.find((bridge) => bridge.id === 'n100');
+  const persisted = await page.evaluate(() => chrome.storage.session.get('connectionRetryState'));
+  assert.equal(persisted.connectionRetryState.n100.nextRetryAt, checkpoint.nextRetryAt);
+  assert.ok(!JSON.stringify(persisted).includes('wrong'), 'session retry data contains no credentials');
+  const cdp = await context.newCDPSession(page);
+  const versions = new Map();
+  cdp.on('ServiceWorker.workerVersionUpdated', ({ versions: updates }) => {
+    for (const version of updates) versions.set(version.versionId, version);
+  });
+  await cdp.send('ServiceWorker.enable');
+  await page.waitForTimeout(100);
+  const version = [...versions.values()].find((item) => item.scriptURL.startsWith(`chrome-extension://${extensionId}/`));
+  assert.ok(version, 'extension worker is visible to CDP');
+  await cdp.send('ServiceWorker.stopWorker', { versionId: version.versionId });
+  await page.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: 'bridgelens-get-status' })).bridges.some((bridge) => bridge.id === 'n100'));
+  const resumed = (await status()).bridges.find((bridge) => bridge.id === 'n100');
+  assert.equal(resumed.attempts, checkpoint.attempts);
+  assert.equal(resumed.nextRetryAt, checkpoint.nextRetryAt);
+  await cdp.detach();
   await mkdir('/tmp/abl-connection-qa', { recursive: true });
   await writeFile('/tmp/abl-connection-qa/status.html', (await page.content()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''));
   for (const width of [390, 768, 1440]) {
@@ -77,11 +97,11 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: '/tmp/abl-connection-qa/recovered.png', fullPage: true });
   // Revoking consent cancels all connections and manual retry cannot re-enable them.
-  await worker.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
+  await page.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
   await page.getByText(/连接已暂停/).waitFor();
   assert.deepEqual((await status()).bridges, []);
   assert.equal(await page.getByRole('button', { name: /立即重连/ }).count(), 0);
-  console.log('PASS: HTTP 401, legacy fallback, retry progress, manual retry, credential recovery, consent and responsive layout');
+  console.log('PASS: HTTP 401, legacy fallback, retry progress, manual retry, worker backoff recovery, credential recovery, consent and responsive layout');
 } finally {
   await context?.close();
   child.kill('SIGKILL');

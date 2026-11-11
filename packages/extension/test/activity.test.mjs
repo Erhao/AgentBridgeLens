@@ -62,7 +62,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
   };
   globalThis.__activityDependencies = dependencies;
   globalThis.chrome = {
-    storage: { local: { get: async () => ({}) }, onChanged: noopEvent },
+    storage: { local: { get: async () => ({}) }, session: { get: async () => ({}), set: async () => {} }, onChanged: noopEvent },
     runtime: {
       sendMessage: async (event) => { events.push(structuredClone(event)); },
       onMessage: { addListener(listener) { listeners.push(listener); }, removeListener(listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1); } }, onInstalled: noopEvent,

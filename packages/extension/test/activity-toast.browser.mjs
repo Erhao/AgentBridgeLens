@@ -265,8 +265,13 @@ try {
   await settings2.locator("#bl-toast-seconds").dispatchEvent("change");
   await settings2.close();
   await a.bringToFront();
-  const work = call("replay_actions", { tabId: bId, actions: Array.from({ length: 10 }, () => ({ type: "scroll", x: 0, y: 0 })) });
-  await toast.waitFor();
+  const work = call("replay_actions", { tabId: bId, actions: Array.from({ length: 24 }, () => ({ type: "scroll", x: 0, y: 0 })) });
+  // Changing retention may make the previous completion visible again. Wait for
+  // this running replay rather than treating any existing toast as its arrival.
+  await a.waitForFunction(() => {
+    const bodies = document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelectorAll(".body") ?? [];
+    return [...bodies].some((body) => body.textContent.includes("正在执行") && body.textContent.includes("回放步骤：24"));
+  });
   assert.match(await toastText(), /正在执行/);
   assert.match(await toastText(), /网站 B/);
   assert.match(await toastText(), /测试 Bridge/);

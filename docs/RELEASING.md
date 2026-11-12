@@ -1,5 +1,13 @@
 # 扩展自动发布
 
+## 默认交付约定
+
+按用户要求，本项目之后一律通过 GitHub Actions 构建、通过 GitHub Releases 发版和交付插件安装包。只有用户专门要求本地构建安装包时，才在本地运行 `pnpm zip` 或插件打包脚本；不要默认生成本地 ZIP，也不要把本地打包当作发版完成。类型检查和单元测试可在本地执行；浏览器验证所需扩展产物优先下载对应提交的 Actions 构建制品。
+
+发版前同步远端并整合已有更新；推送后跟踪 Actions，确认版本、Release 与附件实际生成，再提供 GitHub 下载链接。扩展与 Bridge 分别发版，需要更新 AI 工具入口时同时发布相应 Bridge。协作入口见 [AGENTS.md](../AGENTS.md)。
+
+## 自动发布流程
+
 GitHub Actions 在推送到 `main` 时运行类型检查、桥接服务测试和发布测试。
 通过后，semantic-release 根据上次 `extension-v*` 标签之后的 Conventional Commits
 计算版本，生成发布说明和标签，构建扩展并上传到 GitHub Releases：
@@ -62,7 +70,7 @@ pnpm release:dry-run
 不创建标签、不构建或上传正式安装包。不要在本地运行普通 `pnpm release`，
 正式发布由 CI 完成。
 
-可选的真实 Chrome 升级与回滚验证（先构建扩展，Playwright 可独立安装）：
+可选的真实 Chrome 升级与回滚验证（将对应提交的 GitHub Actions 插件构建制品解压到 `packages/extension/dist/`；Playwright 可独立安装）：
 
 ```bash
 ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/update/update-extension.browser.mjs

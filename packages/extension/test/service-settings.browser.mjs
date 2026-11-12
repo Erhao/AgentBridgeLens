@@ -22,7 +22,7 @@ try {
   await page.locator('[data-service-id="two"]').waitFor();
   const first = page.locator('[data-service-id="one"]');
   const second = page.locator('[data-service-id="two"]');
-  assert.match(await first.locator("summary").textContent(), /未连接 · 开发机/);
+  assert.match(await first.locator("summary").textContent(), /(连接中|等待重连) · 开发机/);
   assert.match(await second.locator("summary").textContent(), /已停用 · 备用机/);
   assert.equal(await page.locator("#bl-conn, #bl-service").count(), 0, "there is no separate service settings section");
   assert.ok(!(await page.locator("#bl-services").innerText()).includes("private-token"), "collapsed list never shows a token");

@@ -1,3 +1,18 @@
+## Bridge 0.5.0
+
+- Exposes `highlight_element` so AI can point out a button or component, scroll it into view, and add an instruction label without clicking it. `scrollIntoView: false` keeps the page position unchanged.
+- Exposes `clear_highlights` to remove these highlights and labels. Requires extension 1.10.0+ for the new scrolling option.
+- Retains connection health diagnostics, authentication, stdio and Streamable HTTP support.
+
+### Install / upgrade without building source
+
+```bash
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.5.0/agentbridgelens-0.5.0.tgz
+agentbridgelens --version
+```
+
+Keep your existing Host / Port / Token, restart the Bridge and reconnect the MCP client to discover the new tools. GitHub and npm publication are verified separately.
+
 ## Bridge 0.4.0
 
 - Adds authenticated `GET /health` diagnostics on the WebSocket port. Missing or incorrect Bearer tokens return HTTP 401; successful checks identify the AgentBridgeLens service without exposing credentials.

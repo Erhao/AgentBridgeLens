@@ -2,6 +2,8 @@
 
 Bridge tags (`bridge-vX.Y.Z`) are independent of extension tags (`extension-vX.Y.Z`). Source package versions and MCP initialization always match, and `agentbridgelens --version` prints the installed version without starting a server.
 
+Release artifacts are built by GitHub Actions and delivered through GitHub Releases. Follow the project policy in [AGENTS.md](../AGENTS.md): do not build a local extension installation ZIP unless the user explicitly requests one.
+
 ## Release process
 
 1. Update `packages/bridge/package.json` and `packages/bridge/CHANGELOG.md`.

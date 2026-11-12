@@ -188,10 +188,10 @@ AI 可以先用 `get_dom_snapshot` 或 `get_accessibility_tree` 找到按钮，�
 
 脚本可以返回 `{ activitySummary: "找到 12 条记录，其中 3 条缺少图片", ...其他数据 }`，让悬浮窗直接显示易懂的结果说明（最多 160 字）。摘要应由脚本根据实际结果生成，不能包含凭证或隐私信息；常见凭证赋值会被遮盖，但这并不等于完整的隐私过滤。没有摘要时，扩展会从返回对象中提取最多 6 项数量、布尔标志、已知状态、容量和百分比，支持最多 3 层嵌套；完整文本、响应正文、凭证字段和数组条目不会被展开。无法提取有效信息时省略「结果」一行。这不需要额外调用模型，旧 Bridge 也能透传这种返回对象；更新 Bridge 并重连 MCP 后，AI 才能看到新增的结果摘要编写提示。
 
-扩展和 Bridge 分别发版。Bridge 正式安装包与升级说明见 [Bridge 0.4.0](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.4.0)，可直接安装，无需克隆源码或本地构建。更新后保留原 Host / Port / Token，重启 Bridge 并重新连接 MCP，让 AI 获取最新工具说明。npm 发布状态以 npm registry 为准，GitHub 安装包不依赖 npm 发布权限。
+扩展和 Bridge 分别发版。Bridge 正式安装包与升级说明见 [Bridge 0.5.0](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.5.0)，可直接安装，无需克隆源码或本地构建。更新后保留原 Host / Port / Token，重启 Bridge 并重新连接 MCP，让 AI 获取最新工具说明。npm 发布状态以 npm registry 为准，GitHub 安装包不依赖 npm 发布权限。
 
 ```bash
-npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.1/agentbridgelens-0.3.1.tgz
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.5.0/agentbridgelens-0.5.0.tgz
 agentbridgelens --version
 ```
 
@@ -256,6 +256,8 @@ node update-extension.mjs --proxy http://127.0.0.1:7897
 
 ## 🛠️ 从源码运行
 
+插件安装包默认通过 GitHub Actions 构建并从 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 交付；仅在用户专门要求时本地构建安装包，详见[发布约定](docs/RELEASING.md#默认交付约定)。以下源码构建命令用于开发调试。
+
 仓库使用 **pnpm 10.33.3**。自动发布工具链使用 Node.js 24，开发时建议与之保持一致。
 
 ```bash
@@ -281,7 +283,6 @@ pnpm build
 ```bash
 pnpm dev:bridge      # Bridge 监听构建并重启
 pnpm dev:extension   # 扩展监听构建，之后需在 Chrome 重新加载
-pnpm zip             # 构建并打包扩展
 pnpm typecheck
 pnpm --dir packages/bridge test
 pnpm --dir packages/extension test

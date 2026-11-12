@@ -49,8 +49,8 @@ try {
   const initial = (await status()).bridges[0];
   assert.equal(initial.state, 'retrying');
   assert.match(initial.lastError, /401/);
-  assert.ok(!(await page.locator('#bl-status').innerText()).includes('browser-test-secret'));
-  await page.waitForFunction(() => document.querySelector('#bl-status').textContent.includes('已尝试'));
+  assert.ok(!(await page.locator('#bl-services').innerText()).includes('browser-test-secret'));
+  await page.waitForFunction(() => document.querySelector('#bl-services').textContent.includes('已尝试'));
   const n100 = page.locator('.bl-bridge-line').filter({ hasText: 'N100-tailnet' });
   assert.equal(await n100.getByRole('button', { name: /立即重连/ }).count(), 1);
   const before = (await status()).bridges[0].attempts;
@@ -86,10 +86,10 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   }
   // Correct credentials in the real settings editor, then recover without reloading the extension.
-  await page.locator('#bl-conn').evaluate((el) => { el.open = true; });
-  await page.locator('#bl-service').selectOption('n100');
-  await page.locator('#bl-token').fill('browser-test-secret');
-  await page.locator('#bl-save').click();
+  const service = page.locator('[data-service-id="n100"]');
+  await service.locator('summary').click();
+  await service.locator('input[name="token"]').fill('browser-test-secret');
+  await service.locator('.bl-service-save').click();
   await page.waitForFunction(() => [...document.querySelectorAll('.bl-bridge-line.ok')].some((row) => row.textContent.includes('N100-tailnet')));
   const recovered = (await status()).bridges.find((bridge) => bridge.id === 'n100');
   assert.equal(recovered.connected, true);
@@ -98,7 +98,7 @@ try {
   await page.screenshot({ path: '/tmp/abl-connection-qa/recovered.png', fullPage: true });
   // Revoking consent cancels all connections and manual retry cannot re-enable them.
   await page.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
-  await page.getByText(/连接已暂停/).waitFor();
+  await page.locator('#bl-status').getByText(/连接已暂停/).waitFor();
   assert.deepEqual((await status()).bridges, []);
   assert.equal(await page.getByRole('button', { name: /立即重连/ }).count(), 0);
   console.log('PASS: HTTP 401, legacy fallback, retry progress, manual retry, worker backoff recovery, credential recovery, consent and responsive layout');

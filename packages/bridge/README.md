@@ -134,10 +134,10 @@ The updated `execute_js` tool accepts an optional `activity` string of 1–80 ch
 
 The extension labels this text as an AI explanation and separately displays actual result statistics. Existing calls containing only `code` remain valid. For script results, simple structural counters such as `rowCount`, `count`, `matchedCount`, `errorCount` or an array length can be summarized; arbitrary strings, object values and raw code are not shown automatically. Prefer returning an object with an `activitySummary` string computed from the actual result (up to 160 characters). This opt-in text appears directly as the card’s result; keep it free of credentials and private data. Common credential assignments are redacted, but this is not a complete privacy filter. Blank or invalid summaries fall back to up to six structured facts (counts, boolean flags, known states, byte capacities and percentages), including objects nested at most three levels deep. Bodies, arbitrary strings, credential fields and array items are not expanded. If no meaningful facts exist, the result line is omitted. Failed calls display their error outcome rather than a success summary. No extra model request is needed.
 
-Use the prebuilt [Bridge 0.3.1 release](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.1):
+Use the prebuilt [Bridge 0.5.0 release](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.5.0):
 
 ```bash
-npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.1/agentbridgelens-0.3.1.tgz
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.5.0/agentbridgelens-0.5.0.tgz
 agentbridgelens --version
 ```
 

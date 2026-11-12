@@ -188,10 +188,10 @@ Cards show automatic action descriptions, target scope and locally generated out
 
 Scripts may return `{ activitySummary: "Found 12 records; 3 have no image", ...otherData }` for a readable result (up to 160 characters). Compute this text from actual results and exclude credentials or private data. Common credential assignments are redacted, but this is not a complete privacy filter. Missing summaries fall back to up to six structured facts: counts, boolean flags, known states, capacity and percentages, from objects nested at most three levels deep. Bodies, arbitrary strings, credentials and array entries are not expanded. If no meaningful facts can be extracted, the result line is omitted. No extra model call is made. Existing Bridges can relay this result object; rebuild and reconnect the Bridge to expose the updated authoring guidance to the AI.
 
-The extension and Bridge have independent releases. Use the prebuilt [Bridge 0.3.1 package](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.3.1) without building source:
+The extension and Bridge have independent releases. Use the prebuilt [Bridge 0.5.0 package](https://github.com/Erhao/AgentBridgeLens/releases/tag/bridge-v0.5.0) without building source:
 
 ```bash
-npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.3.1/agentbridgelens-0.3.1.tgz
+npm install -g https://github.com/Erhao/AgentBridgeLens/releases/download/bridge-v0.5.0/agentbridgelens-0.5.0.tgz
 agentbridgelens --version
 ```
 
@@ -256,6 +256,8 @@ Supports environment-variable proxies, macOS manual system proxies and saved exp
 
 ## 🛠️ Run from source
 
+Extension installation packages are built in GitHub Actions and delivered through [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest). Build a local installation ZIP only when the user explicitly requests it; see the [release policy (中文)](docs/RELEASING.md). The source build commands below are for development.
+
 The repository uses **pnpm 10.33.3**. The release toolchain runs on Node.js 24; use that version for consistent development tooling.
 
 ```bash
@@ -281,7 +283,6 @@ Load `packages/extension/dist/` into Chrome and point your MCP service at the lo
 ```bash
 pnpm dev:bridge      # Watch, rebuild and restart the Bridge
 pnpm dev:extension   # Watch and rebuild; reload the extension in Chrome
-pnpm zip             # Build and package the extension
 pnpm typecheck
 pnpm --dir packages/bridge test
 pnpm --dir packages/extension test

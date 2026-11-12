@@ -160,6 +160,19 @@ test("hover pins survive expiry and history eviction; closing a call stays local
   assert.equal(state.visible(2, 999999).length, 0, "disabling the overlay clears pinned cards");
 });
 
+test("close all dismisses pinned, completed and running cards while allowing future work", () => {
+  const state = new ActivityToastState();
+  const first = { id: "pinned", state: "completed", startedAt: 1, finishedAt: 2 };
+  state.update({ active: [], recent: [first] });
+  state.pin(first.id);
+  state.update({ active: [{ id: "running", state: "running", startedAt: 10 }], recent: [{ id: "done", state: "completed", startedAt: 20, finishedAt: 21 }] });
+  assert.equal(state.visible(2, 30).length, 3);
+  state.dismissAll(2, 30);
+  assert.deepEqual(state.visible(2, 30), []);
+  state.update({ active: [{ id: "new", state: "running", startedAt: 40 }], recent: [{ id: "running", state: "completed", startedAt: 10, finishedAt: 40 }, { id: "done", state: "completed", startedAt: 20, finishedAt: 21 }] });
+  assert.deepEqual(state.visible(2, 50).map((activity) => activity.id), ["new"]);
+});
+
 test("window scoping excludes unresolved and browser-wide actions while preserving that window's last action", () => {
   const first = { id: "a", windowId: 1, startedAt: 1, state: "completed", finishedAt: 5 };
   const second = { id: "b", windowId: 2, startedAt: 2, state: "completed", finishedAt: 6 };

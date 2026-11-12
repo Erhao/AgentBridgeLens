@@ -24,7 +24,7 @@ const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
   inspect_element: (p) => inspectElement(p.selector as string),
   get_element_rect: (p) => getElementRect(p.selector as string),
   highlight_element: (p) =>
-    highlightElement(p.selector as string, p.color as string | undefined, p.label as string | undefined),
+    highlightElement(p.selector as string, p.color as string | undefined, p.label as string | undefined, p.scrollIntoView as boolean | undefined),
   clear_highlights: () => clearHighlights(),
   get_console_logs: (p) => getConsoleLogs(p.level as string | undefined, p.limit as number | undefined),
   get_errors: () => getErrors(),

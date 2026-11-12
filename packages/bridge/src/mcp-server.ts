@@ -103,6 +103,13 @@ export function createMcpServer(relay: WsRelay): McpServer {
   });
 
   // ---- 视觉叠加 ----
+  page("highlight_element", "Show the user where a button or component is: scroll it into view and highlight it with an optional instruction label. Does not click the element. Use get_dom_snapshot or get_accessibility_tree first to find its CSS selector.", {
+    selector: z.string().describe("CSS selector of the element to highlight"),
+    color: z.string().optional().describe("Highlight color (CSS color). Default '#ff6b6b'"),
+    label: z.string().optional().describe("Instruction shown next to the element, e.g. '点击这里提交'"),
+    scrollIntoView: z.boolean().optional().describe("Scroll the element into view. Default true."),
+  });
+  page("clear_highlights", "Remove element highlights and their instruction labels");
   page("mark_elements", "Mark/annotate a set of elements with colored boxes (e.g. to flag changed regions)", {
     selectors: z.array(z.string()).describe("CSS selectors of elements to mark"),
     color: z.string().optional().describe("Box color (CSS color). Default '#ff3b30'"),

@@ -35,7 +35,6 @@ function render() {
   if (!host?.isConnected) {
     host = document.createElement("div");
     host.id = HOST_ID;
-    host.setAttribute("aria-hidden", "true");
     host.style.cssText = "all:initial!important;position:fixed!important;right:12px!important;bottom:12px!important;z-index:2147483647!important;pointer-events:none!important;width:min(340px,calc(100vw - 24px))!important;";
     const shadow = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
@@ -61,12 +60,12 @@ function render() {
     title.textContent = "AgentBridgeLens · 实时操作";
     title.title = "鼠标移入卡片可固定，移出后仍保留，点击卡片关闭按钮移除";
     const close = document.createElement("button");
-    close.textContent = "关闭自动提示";
-    close.title = "关闭所有网页的悬浮提示，可在插件中重新开启";
+    close.type = "button";
+    close.textContent = "全部关闭";
+    close.title = "关闭当前页面的所有动态（包括已固定卡片），后续操作仍会自动提示";
     close.addEventListener("click", () => {
-      enabled = false;
-      removeToast();
-      void chrome.storage.local.set({ activityToastEnabled: false }).catch(() => {});
+      state.dismissAll(seconds);
+      render();
     });
     header.append(title, close);
     stack = document.createElement("div");

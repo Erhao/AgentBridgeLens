@@ -19,7 +19,7 @@ const STYLE = `
   .bl-bridge-line.ok { background: #e3f9e5; color: #207227; }
   .bl-bridge-line.bad { background: #fff0f0; color: #ab1c1c; }
   .bl-bridge-line.pending { background: #f0f2f5; color: #1f2933; }
-  .bl-bridge-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .bl-bridge-heading { display: inline-flex; width:calc(100% - 14px); vertical-align:middle; align-items: center; justify-content: space-between; gap: 8px; }
   .bl-bridge-heading strong { font-size: 12px; font-weight: 600; min-width: 0; }
   .bl-bridge-address, .bl-bridge-progress { color: #52606d; font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
   .bl-bridge-error { margin-top: 4px; color: #ab1c1c; line-height: 1.5; }
@@ -27,16 +27,26 @@ const STYLE = `
   .bl-reconnect:hover { border-color: #52606d; }
   .bl-reconnect:focus-visible { outline: 2px solid #1f2933; outline-offset: 2px; }
   .bl-reconnect:disabled { cursor: wait; color: #52606d; }
-  .bl-connection-hint { color: #627080; padding: 2px 0; }
+  .bl-connection-hint { font-size:12px; line-height:1.5; color: #627080; padding: 2px 0; }
   .bl [hidden] { display: none !important; }
   .bl label { display: block; font-size: 12px; margin-bottom: 8px; }
   .bl select { max-width: 100%; padding: 5px; margin: 4px 0; }
-  .bl .bl-service-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+  .bl .bl-service-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .bl .bl-bridge-line { border:1px solid #e1e6eb; border-left:4px solid var(--accent); padding:0; overflow:hidden; }
+  .bl .bl-bridge-line > summary { padding:8px; color:inherit; line-height:1.5; }
+  .bl .bl-bridge-line > summary:focus-visible { outline:2px solid #4a90d9; outline-offset:-2px; }
+  .bl-bridge-name { font-weight:600; min-width:0; overflow-wrap:anywhere; }
+  .bl-bridge-progress, .bl-bridge-error { display:block; padding-left:14px; }
+  .bl-bridge-url { display:block; padding-left:14px; font-weight:400; overflow-wrap:anywhere; }
+  .bl-bridge-editor { padding:10px; background:#fff; color:#1f2933; }
+  .bl .bl-bridge-message { font-size:12px; line-height:1.5; margin:6px 0 0; overflow-wrap:anywhere; }
+  .bl .bl-bridge-message.bad { color:#ab1c1c; }
+  #bl-add { width:100%; padding:6px; margin:2px 0 12px; border:1px dashed #a8b7c7; border-radius:6px; background:#fff; color:#2d6fd6; cursor:pointer; }
   .bl input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 3px; border: 1px solid #cbd2d9; border-radius: 5px; font-size: 13px; }
   .bl input[type="color"] { width:52px; height:30px; padding:2px; vertical-align:middle; }
   .bl #bl-toast-seconds { width:70px; margin-left:6px; }
-  #bl-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
-  #bl-save:hover { background: #3a7bc0; }
+  .bl-service-save { width: 100%; padding: 7px; margin-top: 4px; border: none; border-radius: 6px; background: #4a90d9; color: #fff; font-size: 13px; cursor: pointer; }
+  .bl-service-save:hover { background: #3a7bc0; }
   .bl .bl-privacy { font-size: 12px; line-height: 1.5; background: #eef4fb; padding: 8px; border-radius: 6px; margin-bottom: 10px; }
   .bl .bl-consent { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; }
   .bl .bl-consent input { width: auto; margin-top: 3px; }
@@ -64,7 +74,10 @@ const STYLE = `
 
 const MARKUP = `
   <h1 class="bl-h1">AgentBridgeLens</h1>
-  <div id="bl-status" class="status">检查连接中…</div>
+  <h2 class="bl-h2">桥接服务</h2>
+  <div id="bl-services"></div>
+  <div id="bl-status" class="bl-connection-hint" role="status">检查连接中…</div>
+  <button id="bl-add" type="button">＋ 添加服务</button>
   <label class="bl-consent"><input id="bl-activity-enabled" type="checkbox" checked />面板内显示实时状态</label>
   <label class="bl-consent"><input id="bl-toast-enabled" type="checkbox" checked />网页自动显示悬浮状态</label>
   <label>完成后保留（秒）<input id="bl-toast-seconds" type="number" min="0" max="300" step="0.1" value="2" title="0～300 秒；执行中的动作会持续显示" /></label>
@@ -77,19 +90,6 @@ const MARKUP = `
     <label class="bl-consent"><input id="bl-consent" type="checkbox" />我同意上述数据访问和传输，并启用 Bridge 连接</label>
     <button id="bl-apply-consent" type="button">应用授权设置</button>
     </div>
-  </details>
-  <details id="bl-conn">
-    <summary>桥接服务（可同时连接多个）</summary>
-    <label>选择服务 <select id="bl-service"></select></label>
-    <div class="bl-service-actions"><button id="bl-add" type="button">添加服务</button><button id="bl-delete" type="button">删除服务</button></div>
-    <label>服务名称 <input id="bl-name" type="text" placeholder="例如：开发机 / 笔记本" /></label>
-    <label>服务强调色 <input id="bl-color" type="color" value="#60a5fa" /></label>
-    <label class="bl-consent"><input id="bl-enabled" type="checkbox" />启用此服务</label>
-    <label>Host <input id="bl-host" type="text" placeholder="127.0.0.1" /></label>
-    <label>Port <input id="bl-port" type="number" min="1" max="65535" placeholder="19222" /></label>
-    <label>Token <span style="color:#7b8794">（跨机时必填）</span>
-      <input id="bl-token" type="password" placeholder="BRIDGELENS_TOKEN" autocomplete="off" /></label>
-    <button id="bl-save">保存此服务</button>
   </details>
   <hr />
   <h2 class="bl-h2">操作页面</h2>
@@ -143,19 +143,13 @@ export function mountControls(root: HTMLElement): void {
   root.classList.add("bl");
   root.innerHTML = MARKUP;
 
-  const serviceSelect = root.querySelector<HTMLSelectElement>("#bl-service")!;
-  const nameInput = root.querySelector<HTMLInputElement>("#bl-name")!;
-  const colorInput = root.querySelector<HTMLInputElement>("#bl-color")!;
-  const enabledInput = root.querySelector<HTMLInputElement>("#bl-enabled")!;
+  const servicesEl = root.querySelector<HTMLDivElement>("#bl-services")!;
   const addBtn = root.querySelector<HTMLButtonElement>("#bl-add")!;
-  const deleteBtn = root.querySelector<HTMLButtonElement>("#bl-delete")!;
-  let profiles: BridgeProfile[] = [];
-  let selectedId = "";
   const statusEl = root.querySelector<HTMLDivElement>("#bl-status")!;
-  const hostInput = root.querySelector<HTMLInputElement>("#bl-host")!;
-  const portInput = root.querySelector<HTMLInputElement>("#bl-port")!;
-  const tokenInput = root.querySelector<HTMLInputElement>("#bl-token")!;
-  const saveBtn = root.querySelector<HTMLButtonElement>("#bl-save")!;
+  const serviceViews = new Map<string, { row: HTMLDetailsElement; profile: BridgeProfile; saved: boolean; name: HTMLElement; url: HTMLElement; progress: HTMLElement; error: HTMLElement; retry: HTMLButtonElement }>();
+  let consent = false;
+  let bridges = new Map<string, BridgeStatus>();
+  let statusRevision = 0;
   const targetEl = root.querySelector<HTMLDivElement>("#bl-target")!;
   const targetMode = root.querySelector<HTMLSelectElement>("#bl-target-mode")!;
   const pagePicker = root.querySelector<HTMLLabelElement>("#bl-page-picker")!;
@@ -239,165 +233,186 @@ export function mountControls(root: HTMLElement): void {
     renderActivity();
   });
 
-  async function refreshStatus() {
-    const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
-    if (bridgeConsent !== true) {
-      statusEl.textContent = "连接已暂停：请阅读数据说明，勾选并应用授权后再连接。";
-      statusEl.className = "status";
-      return;
+  function renderServiceStatus() {
+    for (const [id, view] of serviceViews) {
+      const { profile, saved, row } = view;
+      const bridge = bridges.get(id);
+      const connected = saved && profile.enabled && consent && bridge?.connected;
+      const label = !saved ? "待保存" : !profile.enabled ? "已停用" : !consent ? "连接已暂停" : connected ? "已连接" : bridge?.state === "connecting" ? "连接中" : "等待重连";
+      row.className = `bl-bridge-line ${connected ? "ok" : saved && profile.enabled && consent ? bridge?.state === "connecting" ? "pending" : "bad" : ""}`;
+      row.style.setProperty("--accent", profile.color ?? BRIDGE_COLORS[0]);
+      view.name.textContent = `${label} · ${profile.name}`;
+      view.retry.setAttribute("aria-label", `立即重连 ${profile.name}`);
+      const host = profile.host.includes(":") && !profile.host.startsWith("[") ? `[${profile.host}]` : profile.host;
+      view.url.textContent = `ws://${host}:${profile.port}`;
+      const time = (timestamp: number) => new Date(timestamp).toLocaleTimeString();
+      const next = bridge?.nextRetryAt ? ` · ${Math.max(0, Math.ceil((bridge.nextRetryAt - Date.now()) / 1000))} 秒后重试` : "";
+      const active = saved && profile.enabled && consent;
+      view.progress.textContent = !active ? "" : connected
+        ? bridge?.connectedAt ? `连接于 ${time(bridge.connectedAt)}` : "连接正常"
+        : `已尝试 ${bridge?.attempts ?? 0} 次${next}${bridge?.lastAttemptAt ? ` · 最近尝试 ${time(bridge.lastAttemptAt)}` : ""}`;
+      view.error.textContent = active && bridge?.lastError ? `最近错误：${bridge.lastError}` : "";
+      view.error.hidden = !view.error.textContent;
+      view.retry.hidden = !active || !!connected;
     }
-    chrome.runtime.sendMessage({ type: "bridgelens-get-status" }, (res) => {
-      if (chrome.runtime.lastError || !res) {
-        statusEl.textContent = "状态未知";
-        statusEl.className = "status";
-        return;
-      }
-      const bridges = res.bridges as (BridgeStatus & { color?: string })[] | undefined;
-      statusEl.replaceChildren();
-      statusEl.className = "status";
-      if (!bridges?.length) {
-        statusEl.textContent = "暂无启用的桥接服务，请在下方添加并保存。";
-        return;
-      }
-      statusEl.classList.add("bl-bridges");
-      for (const bridge of bridges) {
-        const row = document.createElement("div");
-        row.className = `bl-bridge-line ${bridge.connected ? "ok" : bridge.state === "connecting" ? "pending" : "bad"}`;
-        row.style.borderLeft = `4px solid ${bridge.color ?? BRIDGE_COLORS[0]}`;
-        const heading = document.createElement("div");
-        heading.className = "bl-bridge-heading";
-        const title = document.createElement("strong");
-        title.textContent = `${bridge.connected ? "已连接" : bridge.state === "connecting" ? "连接中" : "等待重连"} · ${bridge.name}`;
-        heading.appendChild(title);
-        if (!bridge.connected) {
-          const retry = document.createElement("button");
-          retry.type = "button";
-          retry.className = "bl-reconnect";
-          retry.textContent = "立即重连";
-          retry.setAttribute("aria-label", `立即重连 ${bridge.name}`);
-          retry.addEventListener("click", async () => {
-            retry.disabled = true;
-            try {
-              const result = await chrome.runtime.sendMessage({ type: "bridgelens-reconnect", id: bridge.id });
-              if (!result?.ok) throw new Error("无法重连，请确认服务已启用且已授权。");
-              await refreshStatus();
-            } catch (error) {
-              retry.disabled = false;
-              const hint = document.createElement("div");
-              hint.className = "bl-bridge-error";
-              hint.textContent = error instanceof Error ? error.message : "重连失败，请重新打开面板。";
-              row.appendChild(hint);
-            }
-          });
-          heading.appendChild(retry);
-        }
-        row.appendChild(heading);
-        const address = document.createElement("div");
-        address.className = "bl-bridge-address";
-        address.textContent = bridge.url;
-        row.appendChild(address);
-        const progress = document.createElement("div");
-        progress.className = "bl-bridge-progress";
-        const time = (timestamp: number) => new Date(timestamp).toLocaleTimeString();
-        const next = bridge.nextRetryAt ? ` · ${Math.max(0, Math.ceil((bridge.nextRetryAt - Date.now()) / 1000))} 秒后重试` : "";
-        progress.textContent = bridge.connected
-          ? bridge.connectedAt ? `连接于 ${time(bridge.connectedAt)}` : "连接正常"
-          : `已尝试 ${bridge.attempts} 次${next}${bridge.lastAttemptAt ? ` · 最近尝试 ${time(bridge.lastAttemptAt)}` : ""}`;
-        row.appendChild(progress);
-        if (bridge.lastError) {
-          const error = document.createElement("div");
-          error.className = "bl-bridge-error";
-          error.textContent = `最近错误：${bridge.lastError}`;
-          row.appendChild(error);
-        }
-        statusEl.appendChild(row);
-      }
-      if (bridges.some((bridge) => !bridge.connected)) {
-        const hint = document.createElement("div");
-        hint.className = "bl-connection-hint";
-        hint.textContent = "已启用自动重连：失败后等待 3 秒起，每次翻倍，最长 600 秒；每次连接最多等待 10 秒。";
-        statusEl.appendChild(hint);
-      }
-    });
+
   }
 
-  function renderEditor() {
-    serviceSelect.replaceChildren();
-    for (const profile of profiles) {
-      const option = document.createElement("option");
-      option.value = profile.id;
-      option.textContent = `${profile.enabled ? "" : "已停用 · "}${profile.name}`;
-      serviceSelect.appendChild(option);
+  async function refreshStatus() {
+    const revision = ++statusRevision;
+    const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
+    if (revision !== statusRevision) return;
+    consent = bridgeConsent === true;
+    renderServiceStatus();
+    if (!consent) {
+      statusEl.textContent = "连接已暂停：请阅读数据说明，勾选并应用授权后再连接。";
+      return;
     }
-    const profile = profiles.find((p) => p.id === selectedId);
-    serviceSelect.value = selectedId;
-    nameInput.value = profile?.name ?? "";
-    colorInput.value = profile?.color ?? BRIDGE_COLORS[0];
-    hostInput.value = profile?.host ?? DEFAULT_HOST;
-    portInput.value = String(profile?.port ?? DEFAULT_PORT);
-    tokenInput.value = profile?.token ?? "";
-    enabledInput.checked = profile?.enabled ?? true;
-    saveBtn.disabled = !profile;
-    deleteBtn.disabled = !profile;
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "bridgelens-get-status" });
+      if (revision !== statusRevision) return;
+      if (!res) throw new Error("状态未知");
+      const current = (res.bridges ?? []) as BridgeStatus[];
+      bridges = new Map(current.map((bridge) => [bridge.id, bridge]));
+      renderServiceStatus();
+      statusEl.textContent = !serviceViews.size ? "暂无桥接服务，请添加服务。"
+        : [...serviceViews.values()].some((view) => view.saved && view.profile.enabled && !bridges.get(view.profile.id)?.connected)
+          ? "已启用自动重连：失败后等待 3 秒起，每次翻倍，最长 600 秒；每次连接最多等待 10 秒。请检查服务是否启动、Host / Port / Token 和网络。" : "";
+    } catch {
+      if (revision === statusRevision) statusEl.textContent = "连接状态未知";
+    }
+  }
+
+  function addService(profile: BridgeProfile, saved: boolean) {
+    const row = document.createElement("details");
+    row.dataset.serviceId = profile.id;
+    const summary = document.createElement("summary");
+    const name = document.createElement("span");
+    name.className = "bl-bridge-name";
+    const url = document.createElement("span");
+    url.className = "bl-bridge-url";
+    const heading = document.createElement("span");
+    heading.className = "bl-bridge-heading";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "bl-reconnect";
+    retry.textContent = "立即重连";
+    retry.setAttribute("aria-label", `立即重连 ${profile.name}`);
+    retry.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      retry.disabled = true;
+      void chrome.runtime.sendMessage({ type: "bridgelens-reconnect", id: profile.id }).then(async (result) => {
+        if (!result?.ok) throw new Error("无法重连，请确认服务已启用且已授权。");
+        await refreshStatus();
+      }).catch((reason) => {
+        error.textContent = reason instanceof Error ? reason.message : "重连失败，请重新打开面板。";
+        error.hidden = false;
+      }).finally(() => { retry.disabled = false; });
+    });
+    const progress = document.createElement("span");
+    progress.className = "bl-bridge-progress";
+    const error = document.createElement("span");
+    error.className = "bl-bridge-error";
+    heading.append(name, retry);
+    summary.append(heading, url, progress, error);
+    const form = document.createElement("form");
+    form.className = "bl-bridge-editor";
+    form.innerHTML = `
+      <label>服务名称 <input name="name" type="text" placeholder="例如：开发机 / 笔记本" /></label>
+      <label>服务强调色 <input name="color" type="color" /></label>
+      <label class="bl-consent"><input name="enabled" type="checkbox" />启用此服务</label>
+      <label>Host <input name="host" type="text" placeholder="127.0.0.1" required /></label>
+      <label>Port <input name="port" type="number" min="1" max="65535" required /></label>
+      <label>Token <span style="color:#7b8794">（跨机时必填）</span>
+        <input name="token" type="password" placeholder="BRIDGELENS_TOKEN" autocomplete="off" /></label>
+      <button class="bl-service-save" type="submit">保存此服务</button>
+      <div class="bl-service-actions"><button type="button" data-action="cancel">取消</button><button type="button" data-action="delete">删除服务</button></div>
+      <p class="bl-bridge-message" role="status" aria-live="polite"></p>`;
+    row.append(summary, form);
+    servicesEl.appendChild(row);
+    const view = { row, profile, saved, name, url, progress, error, retry };
+    serviceViews.set(profile.id, view);
+    const field = (key: string) => form.elements.namedItem(key) as HTMLInputElement;
+    const message = form.querySelector<HTMLElement>(".bl-bridge-message")!;
+    const save = form.querySelector<HTMLButtonElement>(".bl-service-save")!;
+    const remove = form.querySelector<HTMLButtonElement>('[data-action="delete"]')!;
+    const cancel = form.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
+    function reset() {
+      for (const key of ["name", "color", "host", "port", "token"] as const) field(key).value = String(view.profile[key] ?? "");
+      field("enabled").checked = view.profile.enabled;
+      remove.hidden = !view.saved;
+      message.textContent = "";
+    }
+    function showError(error: unknown) {
+      message.className = "bl-bridge-message bad";
+      message.textContent = error instanceof Error ? error.message : String(error);
+    }
+    async function mutate(action: () => Promise<void>) {
+      save.disabled = remove.disabled = cancel.disabled = true;
+      try { await action(); } catch (error) { showError(error); }
+      finally { save.disabled = remove.disabled = cancel.disabled = false; }
+    }
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (save.disabled) return;
+      const updated: BridgeProfile = {
+        id: profile.id, name: field("name").value.trim() || "未命名服务",
+        host: field("host").value.trim(), port: Number(field("port").value),
+        token: field("token").value.trim(), enabled: field("enabled").checked, color: field("color").value,
+      };
+      void mutate(async () => {
+        const profiles = await getBridgeProfiles();
+        const exists = profiles.some((item) => item.id === profile.id);
+        await setBridgeProfiles(exists ? profiles.map((item) => item.id === profile.id ? updated : item) : [...profiles, updated]);
+        view.profile = updated;
+        view.saved = true;
+        reset();
+        row.open = false;
+        await refreshStatus();
+      });
+    });
+    cancel.addEventListener("click", () => {
+      if (!view.saved) { row.remove(); serviceViews.delete(profile.id); }
+      else { reset(); row.open = false; }
+      renderServiceStatus();
+      addBtn.focus();
+    });
+    remove.addEventListener("click", () => {
+      void mutate(async () => {
+        await setBridgeProfiles((await getBridgeProfiles()).filter((item) => item.id !== profile.id));
+        serviceViews.delete(profile.id);
+        row.remove();
+        addBtn.focus();
+        await refreshStatus();
+      });
+    });
+    reset();
+    row.open = !saved;
+    renderServiceStatus();
+    return row;
   }
 
   async function loadConfig() {
-    profiles = await getBridgeProfiles();
-    selectedId = profiles[0]?.id ?? "";
-    renderEditor();
+    for (const profile of await getBridgeProfiles()) addService(profile, true);
     const { bridgeConsent } = await chrome.storage.local.get("bridgeConsent");
     consentInput.checked = bridgeConsent === true;
     privacyDetails.open = !consentInput.checked;
+    await refreshStatus();
   }
 
-  serviceSelect.addEventListener("change", () => {
-    selectedId = serviceSelect.value;
-    renderEditor();
-  });
   addBtn.addEventListener("click", () => {
-    selectedId = crypto.randomUUID();
-    profiles = withBridgeColors([...profiles, { id: selectedId, name: `服务 ${profiles.length + 1}`, host: DEFAULT_HOST, port: DEFAULT_PORT, token: "", enabled: true }]);
-    renderEditor();
-  });
-  deleteBtn.addEventListener("click", async () => {
-    try {
-      const saved = await getBridgeProfiles();
-      await setBridgeProfiles(saved.filter((p) => p.id !== selectedId));
-      await loadConfig();
-      await refreshStatus();
-    } catch (error) {
-      statusEl.textContent = String(error);
-      statusEl.className = "status bad";
-    }
+    const profiles = withBridgeColors([...serviceViews.values()].map((view) => view.profile).concat({
+      id: crypto.randomUUID(), name: `服务 ${serviceViews.size + 1}`, host: DEFAULT_HOST, port: DEFAULT_PORT, token: "", enabled: true,
+    }));
+    const row = addService(profiles.at(-1)!, false);
+    row.querySelector<HTMLInputElement>('input[name="name"]')!.focus();
   });
 
   applyConsentBtn.addEventListener("click", async () => {
     await chrome.storage.local.set({ bridgeConsent: consentInput.checked });
     privacyDetails.open = !consentInput.checked;
     await refreshStatus();
-  });
-
-  saveBtn.addEventListener("click", async () => {
-    const profile: BridgeProfile = {
-      id: selectedId, name: nameInput.value.trim() || "未命名服务",
-      host: hostInput.value.trim() || DEFAULT_HOST,
-      port: Number(portInput.value || DEFAULT_PORT), token: tokenInput.value.trim(),
-      enabled: enabledInput.checked, color: colorInput.value,
-    };
-    try {
-      const saved = await getBridgeProfiles();
-      const updated = saved.filter((p) => p.id !== selectedId);
-      updated.push(profile);
-      await setBridgeProfiles(updated);
-      profiles = updated;
-      renderEditor();
-      statusEl.textContent = "已保存服务设置，正在检查连接…";
-      statusEl.className = "status";
-      setTimeout(refreshStatus, 600);
-    } catch (error) {
-      statusEl.textContent = error instanceof Error ? error.message : String(error);
-      statusEl.className = "status bad";
-    }
   });
 
   let targetMutation = false;

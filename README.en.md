@@ -168,13 +168,19 @@ Connect the client to `http://<bridge-host>:19223/mcp` with `Authorization: Bear
 
 HTTP uses stateless Streamable HTTP with SSE responses to POST requests. It does not implement legacy HTTP+SSE, session resumption or standalone GET event streams. Browser-based MCP clients also require an Origin allowlist. See the [Bridge documentation](packages/bridge/README.md) for environment variables, authentication and limitations.
 
+## Element guidance and service settings
+
+Use `get_dom_snapshot` or `get_accessibility_tree` to find a button, then call `highlight_element` with its CSS `selector` and an optional instruction `label`. By default it scrolls the element into view and outlines it without clicking; set `scrollIntoView: false` to avoid scrolling. Call `clear_highlights` to remove highlights. Use `mark_elements` for multiple elements.
+
+In the popup and side panel, expand a service at the top to edit its name, accent, enabled state, Host, Port and Token, or delete it. Disabled services remain visible. Add services with the button below the list; canceling an unsaved service discards it. Connection refreshes preserve open editors and unsaved input. Rebuild and reconnect the Bridge to expose the new highlight tools; reload the extension for the UI changes.
+
 ## Live activity cards
 
 Enable **“网页自动显示悬浮状态”** to show page activity only within the target page’s Chrome window. Switching tabs within that window keeps the activity visible; other windows do not receive it. Concurrent work in different windows stays separate. Running activity follows its target tab when it moves to another window; browser-wide management actions remain in the extension panel log.
 
 Each action gets a separate card, stacked with the newest at the bottom. Running actions remain visible. Completed actions show a shrinking countdown bar and disappear after the configured retention period, which defaults to 2 seconds.
 
-Hovering a card (or focusing its controls) pins it: the countdown stops and the progress bar disappears. Moving away does not restart the timer. Click that card’s **×** to dismiss it; other cards keep their own timers, and automatic prompts remain enabled. The header’s **“关闭自动提示”** button disables automatic page prompts until you enable them again in the extension.
+Hovering a card (or focusing its controls) pins it: the countdown stops and the progress bar disappears. Moving away does not restart the timer. Click that card’s **×** to dismiss it; other cards keep their own timers, and automatic prompts remain enabled. The header’s **“全部关闭”** button dismisses all current cards on this page, including pinned and running calls. Those calls stay dismissed when they complete; future calls still appear automatically. Use the extension’s automatic prompt checkbox to disable future prompts.
 
 Pinned cards stay on the current page and survive temporary screenshot suppression. Refreshing the page or disabling prompts clears the pinned state.
 
@@ -205,7 +211,7 @@ This list follows the current [MCP registrations](packages/bridge/src/mcp-server
 | Component, CSS and error sources | `trace_element_to_source` · `trace_style_to_source` · `trace_error_to_source` |
 | Console and lightweight network records | `get_console_logs` · `get_errors` · `get_network_requests` |
 | CDP network capture | `start_cdp_network` · `get_cdp_network` · `stop_cdp_network` |
-| Visual annotations and layout checks | `mark_elements` · `visualize_layout` · `show_responsive_frame` · `clear_overlays` |
+| Visual annotations and layout checks | `highlight_element` · `clear_highlights` · `mark_elements` · `visualize_layout` · `show_responsive_frame` · `clear_overlays` |
 | Record and replay interactions | `start_recording` · `stop_recording` · `replay_actions` |
 | On-demand page HUD | `show_hud` · `update_hud` · `hide_hud` |
 | Side-panel confirmation | `request_user_confirmation` (requires the extension side panel to be open) |

@@ -245,10 +245,10 @@ try {
   await settings2.locator("#bl-toast-seconds").dispatchEvent("change");
   const coloringWork = call("replay_actions", { tabId: bId, actions: Array.from({ length: 12 }, () => ({ type: "scroll", x: 0, y: 0 })) });
   await toast.waitFor();
-  await settings2.locator("#bl-conn").evaluate((el) => { el.open = true; });
-  await settings2.locator("#bl-service").selectOption("test");
-  await settings2.locator("#bl-color").evaluate((el) => { el.value = "#a855f7"; });
-  await settings2.locator("#bl-save").click();
+  const service = settings2.locator('[data-service-id="test"]');
+  await service.locator("summary").click();
+  await service.locator('input[name="color"]').fill("#a855f7");
+  await service.locator(".bl-service-save").click();
   await a.waitForFunction(() => {
     const card = document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelector(".card");
     return card && getComputedStyle(card).borderLeftColor === "rgb(168, 85, 247)";
@@ -292,18 +292,34 @@ try {
   }, shot.dataUrl);
   assert.deepEqual(pixel, [255, 255, 255, 255], "automatic toast must not appear in tool screenshots");
   await toast.waitFor();
+  // Close all removes pinned, running and completed cards locally, without disabling future prompts.
   await toast.locator(".card").first().hover();
-  await toast.locator(".header button").click();
+  await call("get_page_info", { tabId: aId }, client2);
+  await toast.locator(".card").last().hover();
+  await a.mouse.move(0, 0);
+  const bulkRunning = call("replay_actions", { tabId: bId, actions: Array.from({ length: 10 }, () => ({ type: "scroll", x: 0, y: 0 })) });
+  await a.waitForFunction(() => document.querySelector("#bridgelens-activity-toast")?.shadowRoot.querySelectorAll(".card").length === 4);
+  assert.ok(await toast.locator('[data-pinned="true"]').count() >= 2, "multiple hovered cards are pinned before close-all");
+  const dismissedIds = await toast.locator(".card").evaluateAll((cards) => cards.map((card) => card.dataset.activityId));
+  await toast.getByRole("button", { name: "全部关闭", exact: true }).click();
   await a.mouse.move(0, 0);
   await toast.waitFor({ state: "detached" });
-  await call("get_page_info", { tabId: bId });
+  await bulkRunning;
   await a.waitForTimeout(200);
-  assert.equal(await toast.count(), 0, "toast close disables future automatic prompts");
-  assert.equal(await b.locator("#bridgelens-activity-toast").count(), 0, "disable applies to all pages");
+  assert.equal(await toast.count(), 0, "dismissed running calls stay closed after completion");
+  assert.notEqual(await worker.evaluate(async () => (await chrome.storage.local.get("activityToastEnabled")).activityToastEnabled), false);
+  assert.ok(await b.locator("#bridgelens-activity-toast").count(), "closing here does not dismiss another page's cards");
+  await call("get_page_info", { tabId: bId });
+  await toast.waitFor();
+  const newIds = await toast.locator(".card").evaluateAll((cards) => cards.map((card) => card.dataset.activityId));
+  assert.ok(newIds.length && newIds.every((id) => !dismissedIds.includes(id)), "future prompts still appear without reviving dismissed cards");
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
-  await popup.waitForFunction(() => !document.querySelector("#bl-toast-enabled").checked);
+  assert.equal(await popup.locator("#bl-toast-enabled").isChecked(), true);
   assert.equal(await popup.locator("#bl-activity-enabled").isChecked(), true, "panel display is independent");
+  await popup.locator("#bl-toast-enabled").uncheck();
+  await toast.waitFor({ state: "detached" });
+  await b.locator("#bridgelens-activity-toast").waitFor({ state: "detached" });
   await popup.locator("#bl-toast-enabled").check();
   await popup.close();
   await a.bringToFront();
@@ -311,6 +327,25 @@ try {
   await toast.waitFor();
   const dom = await call("get_dom_snapshot", { tabId: aId, selector: "html" });
   assert.ok(!JSON.stringify(dom).includes("bridgelens-activity-toast"), "toast is excluded from DOM snapshots");
+  await call("execute_js", { tabId: aId, code: 'document.querySelector("#submit").style.marginTop="1600px"' });
+  const highlight = await call("highlight_element", { tabId: aId, selector: "#submit", label: "点击这里提交", color: "#2563eb" });
+  assert.equal(highlight.success, true);
+  await a.waitForFunction(() => {
+    const button = document.querySelector("#submit").getBoundingClientRect();
+    const box = document.querySelector("#bridgelens-overlay-layer > div")?.getBoundingClientRect();
+    return box && button.top >= 0 && button.bottom <= innerHeight && Math.abs(box.top - button.top) < 1;
+  });
+  assert.match(await a.locator("#bridgelens-overlay-layer").textContent(), /点击这里提交/);
+  assert.equal(await call("execute_js", { tabId: aId, code: 'document.activeElement === document.querySelector("#submit")' }).then((result) => result.value), false, "highlight does not focus or click the button");
+  await call("execute_js", { tabId: aId, code: "scrollTo(0, 0)" });
+  await call("clear_highlights", { tabId: aId });
+  const noScroll = await call("highlight_element", { tabId: aId, selector: "#submit", scrollIntoView: false });
+  assert.equal(noScroll.success, true);
+  assert.equal(await a.evaluate(() => scrollY), 0, "AI can opt out of scrolling");
+  assert.deepEqual(await call("clear_highlights", { tabId: aId }), { cleared: 1 });
+  const absent = await call("highlight_element", { tabId: aId, selector: "#missing" });
+  assert.equal(absent.success, false);
+  await call("execute_js", { tabId: aId, code: 'document.querySelector("#submit").style.marginTop="0"' });
   // Reload the actual extension while leaving both web pages untouched.
   await a.evaluate(() => { window.__ablRecoveryMarker = "unsaved-page-state"; });
   const oldClient = client;
@@ -342,7 +377,7 @@ try {
   assert.equal(await a.locator("#bridgelens-reload-hint").count(), 0, "healthy recovered pages do not ask for a refresh");
   await recoveryPopup.evaluate(() => chrome.storage.local.set({ bridgeConsent: false }));
   await toast.waitFor({ state: "detached" });
-  console.log("PASS: human-readable action titles, optional AI description, local outcome summaries, collapsed technical details, multiple-window isolation, scoped startup snapshots, viewer/target movement, countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, global close, independent settings, DOM exclusion and consent revoke");
+  console.log("PASS: human-readable action titles, optional AI description, local outcome summaries, collapsed technical details, multiple-window isolation, scoped startup snapshots, viewer/target movement, countdown progress, permanent hover pinning, independent dismissal, pinned screenshot recovery, automatic script recovery after actual extension reload without page refresh, preserved page state, default/custom retention, independent stacked cards, creation order, rapid completions, per-bridge color customization without reconnect, automatic running/completed/failed display without opening panel, background target metadata, concurrent work, page reload, timed hide, clean screenshots, local close-all without disabling future prompts, independent settings, DOM exclusion and consent revoke");
 } finally {
   await context?.close();
   for (const socket of ws.clients) socket.terminate();

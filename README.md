@@ -168,13 +168,19 @@ npx -y agentbridgelens
 
 HTTP 使用无状态 Streamable HTTP，支持 POST 的 SSE 响应；不提供旧版 HTTP+SSE、会话恢复或独立 GET 事件流。浏览器中的 MCP 客户端还需配置 Origin 白名单。完整环境变量、鉴权和限制见 [Bridge 文档](packages/bridge/README.md)。
 
+## 页面高亮与服务设置
+
+AI 可以先用 `get_dom_snapshot` 或 `get_accessibility_tree` 找到按钮，再调用 `highlight_element`，传入 CSS `selector` 和可选 `label`（例如「点击这里提交」）。默认会把元素滚动到可见区域，框选和说明会随页面滚动、布局变化跟随元素，不会代替用户点击。可用 `scrollIntoView: false` 禁止滚动，用 `clear_highlights` 清除高亮；多个元素可用 `mark_elements` 标注。
+
+插件弹窗和侧边栏顶部的桥接服务列表可逐项展开，直接修改名称、颜色、启用状态、Host、Port 和 Token，并保存或删除。停用的服务也会显示；列表下方的「添加服务」用于新建，保存前可取消。定时更新连接状态不会重置正在填写的配置。高亮工具入口需要更新并重新连接 Bridge；界面和悬浮窗改动需要重新加载扩展。
+
 ## 实时动作查看
 
 开启「网页自动显示悬浮状态」后，提示只会显示在目标页面所属的 Chrome 窗口内；在该窗口切换标签页仍可查看，其他窗口不会显示这个动作。多个窗口并行操作时，各窗口分别显示自己的动作。运行中的目标标签页拖到另一窗口时，提示会跟随；纯浏览器管理动作只保留在插件面板日志中。
 
 每个动作会独立显示卡片，按时间堆叠，最新的位于最下方。执行中持续显示；完成后按照「完成后保留（秒）」倒计时，默认 2 秒，卡片底部进度条走完后自动消失。
 
-鼠标移入卡片（或键盘焦点进入）会将它固定：停止倒计时、隐藏进度条，并显示「已固定」。移开鼠标后也不会继续计时，直到点击这张卡片的「×」。关闭单张卡片不会关闭实时显示开关，其他卡片仍独立计时。顶部「关闭自动提示」会关闭网页自动提示，可在插件里重新开启。
+鼠标移入卡片（或键盘焦点进入）会将它固定：停止倒计时、隐藏进度条，并显示「已固定」。移开鼠标后也不会继续计时，直到点击这张卡片的「×」。关闭单张卡片不会关闭实时显示开关，其他卡片仍独立计时。顶部「全部关闭」会一次移除当前页面所有卡片（包括固定和执行中的卡片），同一动作完成后不会重新弹出，后续新动作仍会自动显示。需要关闭自动提示时，使用插件中的「网页自动显示悬浮状态」开关。
 
 固定卡片在当前页面保留，截图期间会临时隐藏，截图后恢复；刷新页面或关闭自动提示会清除固定状态。
 
@@ -205,7 +211,7 @@ agentbridgelens --version
 | 组件、CSS 与错误来源 | `trace_element_to_source` · `trace_style_to_source` · `trace_error_to_source` |
 | 控制台与轻量网络记录 | `get_console_logs` · `get_errors` · `get_network_requests` |
 | CDP 网络采集 | `start_cdp_network` · `get_cdp_network` · `stop_cdp_network` |
-| 可视化标注与布局检查 | `mark_elements` · `visualize_layout` · `show_responsive_frame` · `clear_overlays` |
+| 可视化标注与布局检查 | `highlight_element` · `clear_highlights` · `mark_elements` · `visualize_layout` · `show_responsive_frame` · `clear_overlays` |
 | 交互录制与回放 | `start_recording` · `stop_recording` · `replay_actions` |
 | 按需显示页面 HUD | `show_hud` · `update_hud` · `hide_hud` |
 | 侧边栏交互确认 | `request_user_confirmation`（需打开扩展侧边栏） |

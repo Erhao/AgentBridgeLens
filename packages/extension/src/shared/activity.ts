@@ -168,6 +168,9 @@ export class ActivityToastState {
 
   isPinned(id: string) { return this.pinned.has(id); }
   dismiss(id: string) { this.pinned.delete(id); this.dismissed.add(id); }
+  dismissAll(seconds: number, now = Date.now()) {
+    for (const activity of this.visible(seconds, now)) this.dismiss(activity.id);
+  }
   resetInteraction() { this.pinned.clear(); this.dismissed.clear(); }
 
   visible(seconds: number, now = Date.now()): Activity[] {

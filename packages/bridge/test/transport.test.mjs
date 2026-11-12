@@ -62,6 +62,8 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
     assert.equal(client.getServerVersion().version, packageVersion);
     const { tools } = await client.listTools();
     assert.ok(tools.some((tool) => tool.name === "get_page_info"));
+    assert.ok(tools.some((tool) => tool.name === "highlight_element"));
+    assert.ok(tools.some((tool) => tool.name === "clear_highlights"));
     const script = tools.find((tool) => tool.name === "execute_js");
     assert.match(script.inputSchema.properties.code.description, /activitySummary/);
     assert.equal(script.inputSchema.properties.activity.maxLength, 80);
@@ -93,6 +95,10 @@ test("Streamable HTTP: SDK clients, concurrent calls, extension relay and HTTP v
   })));
   assert.equal(JSON.parse(results[0].content[0].text).tabId, 11);
   assert.equal(JSON.parse(results[1].content[0].text).tabId, 22);
+  await clients[0].callTool({ name: "highlight_element", arguments: { tabId: 11, selector: "#submit", label: "点击这里提交", scrollIntoView: false } });
+  assert.deepEqual(relayed.at(-1).params, { tabId: 11, selector: "#submit", label: "点击这里提交", scrollIntoView: false });
+  await clients[0].callTool({ name: "clear_highlights", arguments: { tabId: 11 } });
+  assert.equal(relayed.at(-1).tool, "clear_highlights");
   const screenshot = await clients[0].callTool({ name: "capture_screenshot", arguments: {} });
   assert.deepEqual(screenshot.content[0], { type: "image", data: "aGVsbG8=", mimeType: "image/png" });
   await clients[0].callTool({ name: "execute_js", arguments: { code: "2+2", tabId: 11 } });

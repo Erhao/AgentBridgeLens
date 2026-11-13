@@ -172,7 +172,7 @@ HTTP uses stateless Streamable HTTP with SSE responses to POST requests. It does
 
 Use `get_dom_snapshot` or `get_accessibility_tree` to find a button, then call `highlight_element` with its CSS `selector` and an optional instruction `label`. By default it scrolls the element into view and outlines it without clicking; set `scrollIntoView: false` to avoid scrolling. Call `clear_highlights` to remove highlights. Use `mark_elements` for multiple elements.
 
-The popup and side panel share Vue 3 + Element Plus controls, imported on demand. Automatic page prompts and their retention duration form one settings group. Turning prompts off disables the duration input while preserving its value for the next time prompts are enabled.
+The popup and side panel share Vue 3 + Element Plus controls, imported on demand. The panel activity switch and its output form one group, with the log directly below the switch. Panel activity and webpage prompts are independent settings. Automatic page prompts and their retention duration form another group. Turning prompts off disables the duration input while preserving its value for the next time prompts are enabled.
 
 In the popup and side panel, expand a service at the top to edit its name, accent, enabled state, Host, Port and Token, or delete it. Disabled services remain visible. Add services with the button below the list; canceling an unsaved service discards it. Connection refreshes preserve open editors and unsaved input. Rebuild and reconnect the Bridge to expose the new highlight tools; reload the extension for the UI changes.
 

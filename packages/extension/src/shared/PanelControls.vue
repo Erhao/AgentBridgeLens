@@ -73,10 +73,13 @@ const {
         <p id="bl-status" class="bl-help" role="status">{{ connectionHint }}</p>
         <ElButton id="bl-add" class="bl-add" type="primary" plain @click="addService">＋ 添加服务</ElButton>
 
-        <div class="bl-setting-row bl-panel-setting">
-          <span>面板内显示实时状态</span>
-          <ElSwitch id="bl-activity-enabled" v-model="settings.panel" aria-label="面板内显示实时状态" @change="value => setPreference('activityDisplayEnabled', value)" />
-        </div>
+        <section class="bl-panel-settings" aria-label="面板实时状态设置">
+          <div class="bl-setting-row">
+            <span>面板内显示实时状态</span>
+            <ElSwitch id="bl-activity-enabled" v-model="settings.panel" aria-label="面板内显示实时状态" @change="value => setPreference('activityDisplayEnabled', value)" />
+          </div>
+          <div v-if="settings.panel" id="bl-activity" class="bl-activity" role="status" aria-live="polite">{{ activityText }}</div>
+        </section>
         <section class="bl-toast-settings" aria-label="网页悬浮提示设置">
           <div class="bl-setting-row">
             <span>网页自动显示悬浮状态</span>
@@ -92,7 +95,6 @@ const {
           </div>
           <p class="bl-help">执行中持续显示，鼠标移入可固定。</p>
         </section>
-        <div v-if="settings.panel" id="bl-activity" class="bl-activity" role="status" aria-live="polite">{{ activityText }}</div>
 
         <ElCollapse v-model="sections" class="bl-sections">
           <ElCollapseItem id="bl-privacy" name="privacy" title="数据访问与授权">
@@ -181,7 +183,7 @@ body { margin:0; font-size:13px; }
 .bl-add.el-button { width:100%; margin:4px 0 12px; border-style:dashed; background:white; }
 .bl-setting-row { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:32px; font-size:12px; }
 .bl-setting-row > span:first-child { min-width:0; }
-.bl-panel-setting { margin-bottom:8px; padding:0 2px; }
+.bl-panel-settings { padding:10px 12px; margin-bottom:12px; border:1px solid #e4e7ed; border-radius:8px; background:#fafafa; }
 .bl-toast-settings { padding:10px 12px; margin-bottom:12px; border:1px solid #d9ecff; border-radius:8px; background:#f5faff; }
 .bl-retention { margin-top:8px; padding-top:8px; border-top:1px solid #e3effc; }
 .bl-retention.is-disabled { color:#a8abb2; }
@@ -190,7 +192,7 @@ body { margin:0; font-size:13px; }
 .bl-duration-field .el-input__inner { text-align:center; }
 .bl-help { margin:6px 0; color:#909399; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
 .bl-toast-settings > .bl-help { margin:8px 0 0; }
-.bl-activity { border-radius:6px; background:#f4f4f5; padding:8px 10px; margin-bottom:10px; font-size:12px; white-space:pre-line; overflow-wrap:anywhere; }
+.bl-activity { padding-top:8px; margin-top:8px; border-top:1px solid #e4e7ed; font-size:12px; white-space:pre-line; overflow-wrap:anywhere; }
 .bl-sections { border:0; }
 .bl-sections > .el-collapse-item > .el-collapse-item__header { min-height:32px; height:auto; line-height:1.5; border:0; color:var(--el-color-primary); font-size:12px; padding:6px 0; }
 .bl-sections .el-collapse-item__wrap { border:0; }
@@ -213,5 +215,5 @@ body { margin:0; font-size:13px; }
 .bl-tab .el-select { width:104px; }
 .bl-select-dropdown { max-width:calc(100vw - 16px); }
 .bl-select-dropdown .el-select-dropdown__item { max-width:calc(100vw - 24px); overflow:hidden; text-overflow:ellipsis; }
-@media (max-width:320px) { .bl-toast-settings { padding:8px; } .bl-setting-row { gap:6px; } }
+@media (max-width:320px) { .bl-panel-settings,.bl-toast-settings { padding:8px; } .bl-setting-row { gap:6px; } }
 </style>

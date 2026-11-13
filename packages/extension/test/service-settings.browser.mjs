@@ -85,12 +85,24 @@ try {
   await group.locator(".el-switch").waitFor();
   assert.equal(await group.locator(".el-switch").count(), 1);
   assert.equal(await group.locator(".el-input-number").count(), 1);
+  // Panel output stays beside its own switch; neither switch controls the other group.
+  const panel = page.getByRole("region", { name: "面板实时状态设置" });
+  await panel.locator("#bl-activity").waitFor();
+  assert.equal(await panel.locator("#bl-toast-enabled").count(), 0);
+  assert.equal(await group.locator("#bl-activity-enabled").count(), 0);
+  await panel.locator("#bl-activity-enabled").press("Enter");
+  await panel.locator("#bl-activity").waitFor({ state: "detached" });
+  assert.equal(await group.locator("#bl-toast-enabled").isChecked(), true);
+  assert.equal(await group.locator("#bl-toast-seconds").isEnabled(), true);
   const duration = group.locator("#bl-toast-seconds");
   await duration.fill("5.5");
   await duration.press("Tab");
   await page.waitForFunction(async () => (await chrome.storage.local.get("activityToastSeconds")).activityToastSeconds === 5.5);
   await group.locator("#bl-toast-enabled").press("Enter");
   await group.locator("#bl-toast-seconds:disabled").waitFor();
+  await panel.locator("#bl-activity-enabled").press("Enter");
+  await panel.locator("#bl-activity").waitFor();
+  assert.equal(await group.locator("#bl-toast-enabled").isChecked(), false, "panel activity is independent of webpage prompts");
   assert.equal(await duration.inputValue(), "5.5", "disabling prompts retains the chosen duration");
   await page.reload();
   await page.locator("#bl-toast-seconds:disabled").waitFor();
@@ -128,5 +140,5 @@ try {
   await page.locator('[data-service-id="one"] .el-collapse-item__header').click();
   assert.equal(await page.locator('[data-service-id="one"] input[name="host"]').isVisible(), true, "side panel uses inline settings too");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "side panel fits a narrow viewport");
-  console.log("PASS: inline service settings, enabled/disabled states, token masking, grouped prompt switch/retention, keyboard operation, disabled duration persistence, cross-panel synchronization, target selects, draft and focus preservation during status refresh, cancel, save without reordering, add, persistence, delete, narrow popup/sidepanel, consent-off access");
+  console.log("PASS: inline service settings, enabled/disabled states, token masking, panel output grouped with its switch, independent panel/webpage settings, grouped prompt switch/retention, keyboard operation, disabled duration persistence, cross-panel synchronization, target selects, draft and focus preservation during status refresh, cancel, save without reordering, add, persistence, delete, narrow popup/sidepanel, consent-off access");
 } finally { await context?.close(); }

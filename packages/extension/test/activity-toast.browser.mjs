@@ -247,6 +247,7 @@ try {
   await toast.waitFor();
   const service = settings2.locator('[data-service-id="test"]');
   await service.locator(".el-collapse-item__header").click();
+  await service.locator('input[name="color"]').click();
   await service.locator('input[name="color"]').fill("#a855f7");
   await service.locator(".bl-service-save").click();
   await a.waitForFunction(() => {

@@ -82,7 +82,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "popup fits a narrow viewport");
   // Both controls form one section, with a real Element Plus switch and number input.
   const group = page.getByRole("region", { name: "网页悬浮提示设置" });
-  await group.locator("#bl-toast-enabled").waitFor();
+  await group.locator(".el-switch").waitFor();
   assert.equal(await group.locator(".el-switch").count(), 1);
   assert.equal(await group.locator(".el-input-number").count(), 1);
   const duration = group.locator("#bl-toast-seconds");
@@ -105,12 +105,13 @@ try {
   await page.waitForFunction(() => document.querySelector("#bl-toast-seconds").value === "2.5");
   await side.close();
   const targetTab = await context.newPage();
-  await targetTab.goto("data:text/html,<title>指定测试页面</title>");
+  await targetTab.goto("data:text/html;charset=utf-8,<title>指定测试页面</title>");
   await page.bringToFront();
   await page.locator("#bl-target-mode").press("Enter");
   await page.getByRole("option", { name: "固定指定页", exact: true }).click();
   await page.locator("#bl-target-page").waitFor();
   // The searchable select's popup must remain inside a narrow extension window.
+  await page.locator("#bl-target-page").press("Enter");
   await page.locator("#bl-target-page").fill("指定测试页面");
   await page.getByRole("option", { name: "指定测试页面", exact: true }).click();
   await page.waitForFunction(() => document.querySelector("#bl-target").textContent.includes("已固定：指定测试页面"));

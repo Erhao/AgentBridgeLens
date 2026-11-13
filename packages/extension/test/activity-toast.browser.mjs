@@ -132,7 +132,7 @@ try {
   await settings.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   assert.equal(await settings.locator("#bl-toast-seconds").inputValue(), "2", "default completion delay is 2 seconds");
   await settings.locator("#bl-toast-seconds").fill("0.8");
-  await settings.locator("#bl-toast-seconds").dispatchEvent("change");
+  await settings.locator("#bl-toast-seconds").press("Tab");
   await settings.waitForFunction(async () => (await chrome.storage.local.get("activityToastSeconds")).activityToastSeconds === 0.8);
   await settings.close();
   await a.bringToFront();
@@ -242,11 +242,11 @@ try {
   await settings2.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   assert.equal(await settings2.locator("#bl-toast-seconds").inputValue(), "0.8", "duration persists when reopening the popup");
   await settings2.locator("#bl-toast-seconds").fill("3");
-  await settings2.locator("#bl-toast-seconds").dispatchEvent("change");
+  await settings2.locator("#bl-toast-seconds").press("Tab");
   const coloringWork = call("replay_actions", { tabId: bId, actions: Array.from({ length: 12 }, () => ({ type: "scroll", x: 0, y: 0 })) });
   await toast.waitFor();
   const service = settings2.locator('[data-service-id="test"]');
-  await service.locator("summary").click();
+  await service.locator(".el-collapse-item__header").click();
   await service.locator('input[name="color"]').fill("#a855f7");
   await service.locator(".bl-service-save").click();
   await a.waitForFunction(() => {
@@ -259,10 +259,10 @@ try {
   await a.waitForTimeout(1000);
   assert.equal(await toast.locator(".card").count(), 1, "custom 3-second delay exceeds the old 0.8-second duration");
   await settings2.locator("#bl-toast-seconds").fill("0.1");
-  await settings2.locator("#bl-toast-seconds").dispatchEvent("change");
+  await settings2.locator("#bl-toast-seconds").press("Tab");
   await toast.waitFor({ state: "detached" });
   await settings2.locator("#bl-toast-seconds").fill("2");
-  await settings2.locator("#bl-toast-seconds").dispatchEvent("change");
+  await settings2.locator("#bl-toast-seconds").press("Tab");
   await settings2.close();
   await a.bringToFront();
   const work = call("replay_actions", { tabId: bId, actions: Array.from({ length: 24 }, () => ({ type: "scroll", x: 0, y: 0 })) });
@@ -322,10 +322,10 @@ try {
   await popup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   assert.equal(await popup.locator("#bl-toast-enabled").isChecked(), true);
   assert.equal(await popup.locator("#bl-activity-enabled").isChecked(), true, "panel display is independent");
-  await popup.locator("#bl-toast-enabled").uncheck();
+  await popup.locator("#bl-toast-enabled").press("Enter");
   await toast.waitFor({ state: "detached" });
   await b.locator("#bridgelens-activity-toast").waitFor({ state: "detached" });
-  await popup.locator("#bl-toast-enabled").check();
+  await popup.locator("#bl-toast-enabled").press("Enter");
   await popup.close();
   await a.bringToFront();
   await call("get_dom_snapshot", { tabId: aId, selector: "html" });

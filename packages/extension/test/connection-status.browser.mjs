@@ -87,7 +87,7 @@ try {
   }
   // Correct credentials in the real settings editor, then recover without reloading the extension.
   const service = page.locator('[data-service-id="n100"]');
-  await service.locator('summary').click();
+  await service.locator('.el-collapse-item__header').click();
   await service.locator('input[name="token"]').fill('browser-test-secret');
   await service.locator('.bl-service-save').click();
   await page.waitForFunction(() => [...document.querySelectorAll('.bl-bridge-line.ok')].some((row) => row.textContent.includes('N100-tailnet')));

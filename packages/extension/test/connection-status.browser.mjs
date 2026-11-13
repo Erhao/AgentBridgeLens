@@ -52,9 +52,9 @@ try {
   assert.ok(!(await page.locator('#bl-services').innerText()).includes('browser-test-secret'));
   await page.waitForFunction(() => document.querySelector('#bl-services').textContent.includes('已尝试'));
   const n100 = page.locator('.bl-bridge-line').filter({ hasText: 'N100-tailnet' });
-  assert.equal(await n100.getByRole('button', { name: /立即重连/ }).count(), 1);
+  assert.equal(await n100.getByRole('button', { name: '立即重连 N100-tailnet', exact: true }).count(), 1);
   const before = (await status()).bridges[0].attempts;
-  await n100.getByRole('button', { name: /立即重连/ }).click();
+  await n100.getByRole('button', { name: '立即重连 N100-tailnet', exact: true }).click();
   assert.ok((await status()).bridges[0].attempts > before);
   await page.waitForTimeout(3200);
   assert.ok((await status()).bridges[0].attempts > before + 1, 'automatic retry continues');

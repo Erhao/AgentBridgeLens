@@ -1,0 +1,42 @@
+name: Linux desktop checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/bridge/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/linux-desktop.yml'
+  pull_request:
+    paths:
+      - 'packages/bridge/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/linux-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install isolated desktop test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core gir1.2-gtk-3.0 \
+            gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-pipewire \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb xauth dbus-x11
+      - run: pnpm --dir packages/bridge typecheck
+      - run: pnpm --dir packages/bridge test
+      - name: Real GTK and D-Bus integration in a virtual desktop
+        run: |
+          dbus-run-session -- xvfb-run -a env ABL_DESKTOP_INTEGRATION=1 GIO_USE_VFS=local \
+            /usr/bin/python3 -m unittest discover -s packages/bridge/test/linux -p 'test_*.py' -v

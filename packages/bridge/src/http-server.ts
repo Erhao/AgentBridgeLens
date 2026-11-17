@@ -3,12 +3,14 @@ import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "./mcp-server.js";
 import type { WsRelay } from "./ws-relay.js";
+import type { DesktopExecutor } from "./desktop.js";
 
 export interface HttpOptions {
   host: string;
   port: number;
   token?: string;
   allowedOrigins?: string[];
+  desktop?: DesktopExecutor;
 }
 
 function reply(res: ServerResponse, status: number, message: string) {
@@ -59,7 +61,7 @@ export async function startHttpServer(relay: WsRelay, options: HttpOptions) {
       reply(res, 405, "Standalone SSE streams and sessions are not supported");
       return;
     }
-    const server = createMcpServer(relay);
+    const server = createMcpServer(relay, options.desktop);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     active.add(server);
     res.once("close", () => {

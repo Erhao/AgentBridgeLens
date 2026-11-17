@@ -8,7 +8,7 @@ Release artifacts are built by GitHub Actions and delivered through GitHub Relea
 
 1. Update `packages/bridge/package.json` and `packages/bridge/CHANGELOG.md`.
 2. Commit and push to `main`, then push `bridge-vX.Y.Z` pointing at that commit.
-3. `bridge-release.yml` checks the tag/version, typechecks and tests the Bridge, builds an npm tarball and SHA256, installs that exact tarball outside the workspace, and runs stdio/HTTP/relay tests against the installed package.
+3. `bridge-release.yml` builds the Windows x64/ARM64 executors through `windows-desktop.yml`, runs native/protocol checks, and downloads those exact-commit artifacts before packaging. It checks the tag/version, required executor files and PE architectures, typechecks and tests the Bridge, builds an npm tarball and SHA256, installs that exact tarball outside the workspace, and runs stdio/HTTP/relay tests against the installed package. Windows GUI tests explicitly skip on noninteractive runners; this does not replace real desktop acceptance.
 4. The tested artifact is released on GitHub with `latest=false`, so extension updaters using `/releases/latest` continue to discover extension releases.
 5. A separate job publishes the same artifact to npm using OIDC. A failed npm job does not remove the GitHub release or imply registry success. Check both jobs and `npm view agentbridgelens version` before announcing npm availability.
 

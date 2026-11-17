@@ -3,9 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { WsRelay } from "./ws-relay.js";
 import { traceErrorToSource } from "./error-tracer.js";
+import { registerDesktopTools, type DesktopExecutor } from "./desktop.js";
 
-export function createMcpServer(relay: WsRelay): McpServer {
+export function createMcpServer(relay: WsRelay, desktop?: DesktopExecutor): McpServer {
   const server = new McpServer({ name: "AgentBridgeLens", version });
+  if (desktop) registerDesktopTools(server, desktop);
 
   // 目标标签页参数（页面类工具共用）：省略则用固定目标 / 当前激活页。
   const TAB = {

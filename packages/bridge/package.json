@@ -8,6 +8,8 @@
   },
   "files": [
     "dist",
+    "linux-agent/*.py",
+    "windows-agent/win-*/**",
     "CHANGELOG.md"
   ],
   "engines": {

@@ -4,6 +4,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { WsRelay } from "./ws-relay.js";
 import { createMcpServer } from "./mcp-server.js";
 import { startHttpServer } from "./http-server.js";
+import { LinuxDesktop } from "./linux-desktop.js";
+import { WindowsDesktop } from "./windows-desktop.js";
 
 if (process.argv.includes("--version")) {
   console.log(version);
@@ -32,18 +34,27 @@ if (mode === "http") {
   }
 }
 
+if (process.env.BRIDGELENS_DESKTOP === "1" && !["linux", "win32"].includes(process.platform)) {
+  throw new Error("BRIDGELENS_DESKTOP=1 supports Linux and Windows only");
+}
+const desktop = process.env.BRIDGELENS_DESKTOP === "1"
+  ? (process.platform === "win32" ? new WindowsDesktop() : new LinuxDesktop())
+  : undefined;
 const relay = new WsRelay({ port: WS_PORT, host: WS_HOST, token: WS_TOKEN });
+process.once("exit", () => desktop?.close());
 try {
   if (mode === "http") {
     const http = await startHttpServer(relay, {
       host: httpHost,
       port: httpPort,
       token: httpToken,
+      desktop,
       allowedOrigins: (process.env.BRIDGELENS_HTTP_ALLOWED_ORIGINS || "")
         .split(",").map((origin) => origin.trim()).filter(Boolean),
     });
     console.error(`[BridgeLens] MCP Streamable HTTP listening on ${httpHost}:${httpPort}/mcp`);
     const shutdown = async () => {
+      await desktop?.stopAndClose();
       await http.close();
       relay.close();
       process.exit(0);
@@ -51,11 +62,16 @@ try {
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
   } else {
-    const mcpServer = createMcpServer(relay);
+    const mcpServer = createMcpServer(relay, desktop);
+    const shutdown = async () => { await desktop?.stopAndClose(); relay.close(); process.exit(0); };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+    process.stdin.once("end", shutdown);
     await mcpServer.connect(new StdioServerTransport());
     console.error(`[BridgeLens] MCP stdio started (WS ${WS_HOST}:${WS_PORT})`);
   }
 } catch (error) {
+  desktop?.close();
   relay.close();
   throw error;
 }

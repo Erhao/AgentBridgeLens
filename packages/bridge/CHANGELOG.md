@@ -1,3 +1,9 @@
+## Unreleased
+
+- Adds an opt-in Windows desktop executor using UIA3, Windows Graphics Capture and Win32 input, with per-window local approval and a visible stop control.
+- Shares the desktop MCP entry points with Linux while keeping Windows named keys and Linux evdev keycodes distinct.
+- Adds Windows x64/ARM64 CI artifacts and includes validated native executors in future Bridge release packages. Real Windows desktop acceptance is pending; see `docs/WINDOWS-DESKTOP.md`.
+
 ## Bridge 0.5.0
 
 - Exposes `highlight_element` so AI can point out a button or component, scroll it into view, and add an instruction label without clicking it. `scrollIntoView: false` keeps the page position unchanged.

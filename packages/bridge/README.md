@@ -4,6 +4,10 @@ MCP server that bridges AI coding agents (Claude Code, etc.) to a **real Chrome 
 
 It supports MCP stdio (default) or Streamable HTTP and relays tool calls to the browser extension over WebSocket.
 
+Experimental Ubuntu desktop support is available in source with `BRIDGELENS_DESKTOP=1`. It adds AT-SPI observation/actions and Portal screen/input sessions through a bundled local Python executor, independently of the Chrome extension. Requires a logged-in graphical session and Ubuntu GI/GStreamer packages; see [setup, tools, limitations and validation](../../docs/LINUX-DESKTOP.md). This source feature has not been released yet.
+
+Experimental Windows desktop support uses the same opt-in flag and desktop tools with a native C# executor (UIA3, Windows Graphics Capture, Win32 input). Local approval scopes capture and control to one window; named Windows keys do not replace Linux evdev codes. CI builds self-contained x64/ARM64 executors for Bridge releases. Source builds may set `BRIDGELENS_WINDOWS_AGENT` to the executable path. See [Windows setup, permissions and validation](../../docs/WINDOWS-DESKTOP.md); this feature is unreleased and real desktop acceptance is still pending.
+
 ## Install (recommended: once, globally)
 
 No clone/build needed — run straight from npm via `npx`, registered at **user scope** so every project/session has it:

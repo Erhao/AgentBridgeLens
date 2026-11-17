@@ -6,3 +6,8 @@ dist/
 .vaw/
 agentbridgelens-extension.zip
 /release/
+__pycache__/
+*.py[cod]
+packages/windows-agent/**/bin/
+packages/windows-agent/**/obj/
+packages/bridge/windows-agent/

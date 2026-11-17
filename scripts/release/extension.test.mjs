@@ -9,6 +9,7 @@ import { inflateRawSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { analyzeCommits } from "@semantic-release/commit-analyzer";
 import { prepare, validateVersion } from "./extension.mjs";
+import { releaseRules } from "./extension-rules.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const logger = { log() {} };
@@ -36,6 +37,12 @@ test("commit history determines patch, minor, major or no release", async () => 
   }
 });
 
+test("desktop and Bridge commits do not release the browser extension", async () => {
+  const commits=["feat(desktop): add native support","fix(bridge): route native requests","refactor(platforms): share protocol"].map(message=>({message}));
+  assert.equal(await analyzeCommits({releaseRules},{cwd:root,logger,commits}),null);
+  assert.equal(await analyzeCommits({releaseRules},{cwd:root,logger,commits:[...commits,{message:"fix(extension): correct popup"}]}),"patch");
+});
+
 // Read local ZIP records to inspect what users actually download.
 function zipEntry(zip, wanted) {
   let offset = 0;
@@ -56,7 +63,7 @@ function zipEntry(zip, wanted) {
   throw new Error(`Missing ZIP entry: ${wanted}`);
 }
 
-test("prepare builds a real versioned ZIP with manifest, scripts and matching checksum", async () => {
+test("prepare builds a real versioned ZIP with manifest, scripts and matching checksum", { skip: process.env.CI !== "true" && process.env.ABL_RELEASE_PACKAGE_TEST !== "1" }, async () => {
   const cwd = await mkdtemp(join(tmpdir(), "bridgelens-release-"));
   try {
     await mkdir(join(cwd, "packages"));

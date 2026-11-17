@@ -1,0 +1,43 @@
+name: Unified desktop build and registry
+on:
+  push:
+    branches: [main]
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+jobs:
+  macos:
+    runs-on: macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install workspace
+        run: npx --yes pnpm@10.33.3 install --frozen-lockfile
+      - name: Check shared packages and Bridge
+        run: |
+          npx --yes pnpm@10.33.3 typecheck
+          npx --yes pnpm@10.33.3 --dir packages/bridge test
+          npx --yes pnpm@10.33.3 test:contracts
+          node --test scripts/release/packages.test.mjs
+      - name: Build Mac companion
+        run: bash scripts/build/macos.sh package
+      - name: Verify actual Swift client through unified MCP
+        run: node scripts/test/macos-transport.mjs
+      - name: Package standalone Bridge
+        run: |
+          export PATH="$(dirname "$(command -v node)"):$PATH"
+          npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/bundle-bridge.sh'
+      - name: Publish immutable registry files and verify downloads
+        env:
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_REPOSITORY: ${{ gitea.repository }}
+          GITEA_REF: ${{ gitea.ref }}
+          GITEA_SHA: ${{ gitea.sha }}
+          GITEA_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: node scripts/release/packages.mjs
+      - uses: actions/upload-artifact@v3
+        with:
+          name: unified-desktop-${{ gitea.sha }}
+          path: |
+            artifacts/*.zip
+            artifacts/*.tgz
+            artifacts/SHA256SUMS
+            artifacts/BUILD-MANIFEST.json

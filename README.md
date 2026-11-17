@@ -1,3 +1,5 @@
+> 跨平台整理：同一 MCP Bridge 现在组合浏览器与 macOS / Windows / Linux 执行端。原生源码在 `platforms/`，公共协议与运行逻辑在 `packages/`。见 [统一架构](docs/ARCHITECTURE.md)、[迁移说明](docs/architecture/MIGRATION.md) 和 [桌面制品发布](docs/releasing/DESKTOP.md)。
+
 <div align="center">
 
 <img src="packages/extension/public/icons/icon128.png" width="88" alt="AgentBridgeLens 图标" />

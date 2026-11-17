@@ -11,3 +11,11 @@ __pycache__/
 packages/windows-agent/**/bin/
 packages/windows-agent/**/obj/
 packages/bridge/windows-agent/
+
+# Native source and staged distribution assets
+platforms/**/bin/
+platforms/**/obj/
+platforms/**/.build/
+platforms/**/.swiftpm/
+packages/bridge/linux-agent/
+/artifacts/

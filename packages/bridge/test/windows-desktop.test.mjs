@@ -13,7 +13,7 @@ const temporary = await mkdtemp(fileURLToPath(new URL("../node_modules/.windows-
 after(() => rm(temporary, { recursive: true, force: true }));
 await build({ entry: { desktop: fileURLToPath(new URL("../src/desktop.ts", import.meta.url)),
   windows: fileURLToPath(new URL("../src/windows-desktop.ts", import.meta.url)) },
-  outDir: temporary, outExtension: () => ({ js: ".mjs" }), format: ["esm"], dts: false, silent: true,
+  outDir: temporary, outExtension: () => ({ js: ".mjs" }), format: ["esm"], dts: false, silent: true, noExternal: [/^@agentbridgelens\//],
 });
 const { DesktopProcess, registerDesktopTools } = await import(pathToFileURL(join(temporary, "desktop.mjs")));
 const { WindowsDesktop } = await import(pathToFileURL(join(temporary, "windows.mjs")));
@@ -36,7 +36,7 @@ test("Windows MCP requires a window scope and named keys; Linux numeric keys rem
     for (const keys of [[29, 31], ["CTRL", "S"]]) {
       const previous = sent.length;
       const result = await client.callTool({ name: "desktop_act", arguments: { sessionId: "s", action: "press_keys", keys, screenshotId: "frame" } });
-      const valid = platform === "win32" ? typeof keys[0] === "string" : typeof keys[0] === "number";
+      const valid = platform !== "win32" || typeof keys[0] === "string";
       assert.equal(Boolean(result.isError), !valid);
       assert.equal(sent.length, previous + Number(valid));
     }

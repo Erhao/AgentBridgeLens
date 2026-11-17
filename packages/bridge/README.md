@@ -1,3 +1,5 @@
+> Bridge 0.6.0 开发版：`BRIDGELENS_DESKTOP=1` 支持 macOS、Windows 和 Linux，浏览器工具保持兼容。Mac 初始化配对使用 `agentbridgelens --init-mac`，仍需本机应用授权。见 [Mac 配置](../../docs/platforms/MACOS.md)、[公共协议](../../docs/protocol/DESKTOP.md) 和 [迁移说明](../../docs/architecture/MIGRATION.md)。
+
 # agentbridgelens
 
 MCP server that bridges AI coding agents (Claude Code, etc.) to a **real Chrome browser** via the AgentBridgeLens extension: DOM inspection, screenshots (incl. background tabs), network/console capture, source-map tracing (UI → component source line), visual overlays, action record/replay, and multi-tab targeting.

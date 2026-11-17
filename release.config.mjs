@@ -1,9 +1,11 @@
+import { releaseRules } from "./scripts/release/extension-rules.mjs";
+
 export default {
   branches: ["main"],
   tagFormat: "extension-v${version}",
   repositoryUrl: "https://github.com/Erhao/AgentBridgeLens.git",
   plugins: [
-    "@semantic-release/commit-analyzer",
+    ["@semantic-release/commit-analyzer", {releaseRules}],
     "@semantic-release/release-notes-generator",
     "./scripts/release/extension.mjs",
     ["@semantic-release/github", {

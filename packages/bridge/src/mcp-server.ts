@@ -1,151 +1,22 @@
 import { version } from "./version.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import type { WsRelay } from "./ws-relay.js";
-import { traceErrorToSource } from "./error-tracer.js";
-import { registerDesktopTools, type DesktopExecutor } from "./desktop.js";
+import type { WsRelay } from "@agentbridgelens/browser-adapter";
+import {
+  registerDesktopTools,
+  registerMacCompatibilityTools,
+  MacDesktop,
+  type DesktopExecutor,
+} from "@agentbridgelens/desktop";
+import { registerBrowserTools } from "./mcp/browser-tools.js";
 
-export function createMcpServer(relay: WsRelay, desktop?: DesktopExecutor): McpServer {
+export function createMcpServer(
+  relay: WsRelay,
+  desktop?: DesktopExecutor,
+): McpServer {
   const server = new McpServer({ name: "AgentBridgeLens", version });
+  registerBrowserTools(server, relay);
   if (desktop) registerDesktopTools(server, desktop);
-
-  // 目标标签页参数（页面类工具共用）：省略则用固定目标 / 当前激活页。
-  const TAB = {
-    tabId: z
-      .number()
-      .optional()
-      .describe("目标标签页 id（来自 list_tabs）。省略则用已固定的目标标签页，否则用当前激活标签页"),
-  };
-  const asText = (result: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-  });
-
-  // 页面类工具：自动附带可选 tabId，结果按文本返回。
-  type Shape = Record<string, z.ZodTypeAny>;
-  const page = (name: string, description: string, schema: Shape = {}) =>
-    server.tool(name, description, { ...schema, ...TAB }, async (args) => asText(await relay.send(name, args)));
-  // 非页面类工具（不需要 tabId）。
-  const plain = (name: string, description: string, schema: Shape = {}) =>
-    server.tool(name, description, schema, async (args) => asText(await relay.send(name, args)));
-
-  // ---- 标签页定位 ----
-  plain("list_tabs", "List all open tabs across all windows (tabId/title/url/active/isTarget/openedByTarget). Multiple tabs can be pinned as targets; operate on any tab by passing its tabId.");
-  plain("set_target_tab", "Pin a tab into the target set (multiple tabs can be pinned). When a tool is called without tabId, the most-recently-active pinned tab is used.", {
-    tabId: z.number().describe("Tab id to pin (from list_tabs)"),
-  });
-  plain("get_target_tab", "Get the set of pinned target tabs and which one is the current default (follow-active if none pinned).");
-  plain("clear_target_tab", "Unpin a target tab, or clear all pinned targets if tabId is omitted.", {
-    tabId: z.number().optional().describe("Tab id to unpin. Omit to clear all."),
-  });
-
-  // ---- 看页面 / 抓现状 ----
-  page("get_page_info", "Get current page URL, title, and meta information");
-
-  server.tool(
-    "capture_screenshot",
-    "Capture a screenshot of a tab, or crop to a specific element. Background tabs are captured via CDP.",
-    {
-      selector: z.string().optional().describe("CSS selector to capture a specific element (scrolled into view and cropped). Omit for full viewport."),
-      ...TAB,
-    },
-    async (args) => {
-      const result = (await relay.send("capture_screenshot", args)) as { dataUrl: string };
-      const base64 = result.dataUrl.replace(/^data:image\/png;base64,/, "");
-      return { content: [{ type: "image", data: base64, mimeType: "image/png" }] };
-    }
-  );
-
-  page("execute_js", "Execute a JavaScript expression in the page context through the Chrome Debugger API (may show a debugging banner)", {
-    code: z.string().describe("JavaScript code to execute in the page context. 尽量根据实际执行结果返回 {activitySummary: '简短中文结果摘要', ...其他数据}，例如根据检测数量说明找到几个按钮、哪些不可用。activitySummary 供网页悬浮窗显示，最多 160 字；不要包含凭证或隐私数据，不要预写未经验证的成功结论。无需额外调用模型生成摘要。"),
-    activity: z.string().trim().min(1).max(80).optional().describe("用一句简短中文说明本次操作和目的，供网页实时提示；不含敏感值，不预先宣称结果。"),
-  });
-  page("get_dom_snapshot", "Get a simplified DOM snapshot of the page or a specific subtree", {
-    selector: z.string().optional().describe("CSS selector for subtree root. Omit for full page."),
-    maxDepth: z.number().optional().describe("Maximum depth of DOM tree to capture. Default 6."),
-  });
-  page("inspect_element", "Inspect a DOM element: attributes, computed styles, box model, and text content", {
-    selector: z.string().describe("CSS selector of the element to inspect"),
-  });
-  page("get_accessibility_tree", "Get a simplified accessibility tree (roles + accessible names) of the page or a subtree", {
-    selector: z.string().optional().describe("CSS selector for subtree root. Omit for full page."),
-    maxDepth: z.number().optional().describe("Maximum depth to traverse. Default 12."),
-  });
-  page("get_performance_metrics", "Get page performance metrics: navigation timing, FCP, LCP, CLS, JS heap memory");
-
-  // ---- 定位 Bug：界面 → 代码 ----
-  page("trace_element_to_source", "Trace a DOM element back to its source component file and line number (React/Vue dev builds)", {
-    selector: z.string().describe("CSS selector of the element to trace"),
-  });
-  page("trace_style_to_source", "Trace which CSS rules apply to an element and which stylesheet they come from", {
-    selector: z.string().describe("CSS selector of the element to trace"),
-    property: z.string().optional().describe("Only return rules that set this CSS property"),
-  });
-  server.tool(
-    "trace_error_to_source",
-    "Resolve a JS error stack trace back to original source files/lines via source maps (runs in the bridge, fetches the bundle and .map)",
-    { stack: z.string().describe("The error stack string (e.g. from Error.stack or get_errors output)") },
-    async ({ stack }) => asText(await traceErrorToSource(stack))
-  );
-
-  // ---- 网络 / 控制台 ----
-  page("get_console_logs", "Get captured console log entries from the page", {
-    level: z.enum(["log", "warn", "error", "info", "debug"]).optional().describe("Filter by log level"),
-    limit: z.number().optional().describe("Maximum number of entries to return. Default 50."),
-  });
-  page("get_errors", "Get only error-level console entries (uncaught errors and rejections included)");
-  page("get_network_requests", "Get network requests captured (lightweight; only those after content-script injection)", {
-    urlPattern: z.string().optional().describe("Filter by URL substring"),
-    status: z.number().optional().describe("Filter by HTTP status code"),
-  });
-  page("start_cdp_network", "Attach the Chrome debugger to a tab and start capturing full network traffic via CDP. Shows a debugging banner; works per-tab (multiple tabs supported).");
-  page("stop_cdp_network", "Detach the Chrome debugger and stop CDP network capture for a tab");
-  page("get_cdp_network", "Get network requests captured via CDP for a tab (requires start_cdp_network first)", {
-    urlPattern: z.string().optional().describe("Filter by URL substring"),
-    status: z.number().optional().describe("Filter by HTTP status code"),
-  });
-
-  // ---- 视觉叠加 ----
-  page("highlight_element", "Show the user where a button or component is: scroll it into view and highlight it with an optional instruction label. Does not click the element. Use get_dom_snapshot or get_accessibility_tree first to find its CSS selector.", {
-    selector: z.string().describe("CSS selector of the element to highlight"),
-    color: z.string().optional().describe("Highlight color (CSS color). Default '#ff6b6b'"),
-    label: z.string().optional().describe("Instruction shown next to the element, e.g. '点击这里提交'"),
-    scrollIntoView: z.boolean().optional().describe("Scroll the element into view. Default true."),
-  });
-  page("clear_highlights", "Remove element highlights and their instruction labels");
-  page("mark_elements", "Mark/annotate a set of elements with colored boxes (e.g. to flag changed regions)", {
-    selectors: z.array(z.string()).describe("CSS selectors of elements to mark"),
-    color: z.string().optional().describe("Box color (CSS color). Default '#ff3b30'"),
-    label: z.string().optional().describe("Optional label text shown on each box"),
-  });
-  page("visualize_layout", "Outline elements whose content is clipped by overflow (layout debugging)");
-  page("show_responsive_frame", "Overlay a target-viewport-width frame and list elements wider than it (responsive debugging)", {
-    width: z.number().optional().describe("Target viewport width in px. Default 375."),
-  });
-  page("clear_overlays", "Remove all visual overlays (marks / layout / responsive frame)");
-
-  // ---- 录制 / 回放 ----
-  page("start_recording", "Start recording user interactions (clicks, inputs, scrolls) on a tab");
-  page("stop_recording", "Stop recording and return the captured action sequence");
-  page("replay_actions", "Replay a previously recorded action sequence on a tab", {
-    actions: z.array(z.record(z.string(), z.unknown())).describe("Action sequence, as returned by stop_recording"),
-  });
-
-  // ---- HUD ----
-  page("show_hud", "Show a small on-page HUD panel in the bottom-right corner");
-  page("hide_hud", "Hide the on-page HUD panel");
-  page("update_hud", "Update the HUD status text", {
-    text: z.string().describe("Status text to display in the HUD"),
-  });
-
-  // ---- 交互式确认（不针对具体页面）----
-  plain(
-    "request_user_confirmation",
-    "Ask the user a question in the side panel and wait for their choice (the AgentBridgeLens side panel must be open).",
-    {
-      message: z.string().describe("The question/prompt shown to the user"),
-      options: z.array(z.string()).optional().describe("Choice buttons. Default ['确认', '取消']"),
-    }
-  );
-
+  if (desktop instanceof MacDesktop)
+    registerMacCompatibilityTools(server, desktop);
   return server;
 }

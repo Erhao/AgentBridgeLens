@@ -1,3 +1,11 @@
+## Bridge 0.6.0 (development)
+
+- Consolidates browser and macOS/Windows/Linux support into one workspace and one MCP entry point.
+- Shares protocol schemas, request ownership, cancellation and image result conversion; bundles internal modules in the published Bridge.
+- Adds macOS desktop adapters and legacy mac_* aliases without changing the installed companion identity.
+- Supports named keys on all desktops while preserving Linux evdev compatibility.
+- Moves native sources under platforms/ while retaining existing installed worker paths.
+
 ## Unreleased
 
 - Adds an opt-in Windows desktop executor using UIA3, Windows Graphics Capture and Win32 input, with per-window local approval and a visible stop control.

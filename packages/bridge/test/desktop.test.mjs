@@ -50,7 +50,7 @@ test("desktop MCP returns images, validates schemas, and survives executor failu
   assert.equal(parse(image).screenshot.data, undefined);
   assert.equal((await client.callTool({ name: "desktop_observe", arguments: { sessionId: caps.sessionId, windowId: "w", maxNodes: 1001 } })).isError, true);
   for (const target of ["crash", "invalid-json"]) {
-    const result = await client.callTool({ name: "desktop_act", arguments: { sessionId: caps.sessionId, action: "invoke", target } });
+    const result = await client.callTool({ name: "desktop_act", arguments: { sessionId: caps.sessionId, action: "invoke", snapshotId: "fixture", target } });
     assert.equal(result.isError, true);
     assert.match(result.content[0].text, /exited|invalid JSON/);
     const restarted = parse(await client.callTool({ name: "desktop_get_capabilities", arguments: {} }));

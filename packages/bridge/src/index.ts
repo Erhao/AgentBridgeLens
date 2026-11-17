@@ -4,8 +4,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { WsRelay } from "./ws-relay.js";
 import { createMcpServer } from "./mcp-server.js";
 import { startHttpServer } from "./http-server.js";
-import { LinuxDesktop } from "./linux-desktop.js";
-import { WindowsDesktop } from "./windows-desktop.js";
+import { LinuxDesktop, WindowsDesktop, MacDesktop } from "@agentbridgelens/desktop";
+import { readToken } from "@agentbridgelens/runtime";
 
 if (process.argv.includes("--version")) {
   console.log(version);
@@ -34,11 +34,17 @@ if (mode === "http") {
   }
 }
 
-if (process.env.BRIDGELENS_DESKTOP === "1" && !["linux", "win32"].includes(process.platform)) {
-  throw new Error("BRIDGELENS_DESKTOP=1 supports Linux and Windows only");
+if (process.argv.includes("--init-mac")) {
+  readToken(process.env.BRIDGELENS_MAC_TOKEN_FILE ?? process.env.AGENTBRIDGEMAC_TOKEN_FILE);
+  console.log("Mac pairing ready. Open AgentBridgeMac.app and enable BRIDGELENS_DESKTOP=1 in this MCP service.");
+  process.exit(0);
+}
+
+if (process.env.BRIDGELENS_DESKTOP === "1" && !["linux", "win32", "darwin"].includes(process.platform)) {
+  throw new Error("BRIDGELENS_DESKTOP=1 supports macOS, Linux and Windows");
 }
 const desktop = process.env.BRIDGELENS_DESKTOP === "1"
-  ? (process.platform === "win32" ? new WindowsDesktop() : new LinuxDesktop())
+  ? (process.platform === "darwin" ? await MacDesktop.create() : process.platform === "win32" ? new WindowsDesktop() : new LinuxDesktop())
   : undefined;
 const relay = new WsRelay({ port: WS_PORT, host: WS_HOST, token: WS_TOKEN });
 process.once("exit", () => desktop?.close());

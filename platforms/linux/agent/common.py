@@ -45,9 +45,27 @@ def binding(name, version):
     return _bindings[name]
 
 
+class LinkedCancellation:
+    def __init__(self, parent, request):
+        self.parent, self.request = parent, request
+
+    def is_set(self):
+        return self.parent.is_set() or self.request.is_set()
+
+    def set(self):
+        self.request.set()
+
+    def wait(self, timeout):
+        deadline = time.monotonic() + timeout
+        while not self.is_set() and time.monotonic() < deadline:
+            self.request.wait(min(0.025, max(0, deadline - time.monotonic())))
+        return self.is_set()
+
+
 class Context:
-    def __init__(self, cancel=None, timeout=30):
-        self.cancel = cancel or threading.Event()
+    def __init__(self, cancel=None, timeout=30, request_cancel=None):
+        parent = cancel or threading.Event()
+        self.cancel = LinkedCancellation(parent, request_cancel) if request_cancel is not None else parent
         self.deadline = time.monotonic() + timeout
 
     def check(self):

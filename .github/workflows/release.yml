@@ -24,6 +24,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm --dir packages/bridge test
+      - run: pnpm test:contracts
       - run: pnpm --dir packages/extension test
       - run: pnpm test:release
       - run: pnpm zip

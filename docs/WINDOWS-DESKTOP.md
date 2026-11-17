@@ -18,10 +18,10 @@ windows-agent/win-arm64/AgentBridgeLens.Windows.exe
 这些产物尚未发布。源码开发可安装 .NET 10 SDK 并做 Debug 构建：
 
 ```powershell
-dotnet build packages/windows-agent/AgentBridgeLens.Windows.csproj
+dotnet build platforms/windows/AgentBridgeLens.Windows.csproj
 pnpm --dir packages/bridge build
 $env:BRIDGELENS_DESKTOP = "1"
-$env:BRIDGELENS_WINDOWS_AGENT = (Resolve-Path "packages/windows-agent/bin/Debug/net10.0-windows10.0.19041.0/AgentBridgeLens.Windows.exe").Path
+$env:BRIDGELENS_WINDOWS_AGENT = (Resolve-Path "platforms/windows/bin/Debug/net10.0-windows10.0.19041.0/AgentBridgeLens.Windows.exe").Path
 node packages/bridge/dist/index.js
 ```
 
@@ -104,8 +104,8 @@ Windows 的 `keys` 是字符串数组，Linux 的 evdev 数字数组保持兼容
 ```powershell
 pnpm --dir packages/bridge typecheck
 pnpm --dir packages/bridge test
-dotnet run --project packages/windows-agent/tests/Core/Core.csproj
-dotnet run --project packages/windows-agent/tests/Integration/Integration.csproj
+dotnet run --project platforms/windows/tests/Core/Core.csproj
+dotnet run --project platforms/windows/tests/Integration/Integration.csproj
 ```
 
 Core 测试可以在 Linux 运行，覆盖坐标边界、负原点、引用淘汰、取消、具名按键及系统快捷键限制。Integration 仅在 Windows 运行，创建独立 WinForms 测试进程，检查真实 UIA、密码省略、Unicode 读回、按钮状态改变、WGC 像素、权限门控与协议取消。测试驱动只批准本次测试创建的进程中的确认框，生产执行端不包含跳过本机确认的环境变量。

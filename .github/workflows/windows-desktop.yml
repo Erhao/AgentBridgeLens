@@ -4,14 +4,16 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/bridge/**'
-      - 'packages/windows-agent/**'
+      - 'packages/**'
+      - 'tests/contracts/**'
+      - 'platforms/windows/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/windows-desktop.yml'
   pull_request:
     paths:
-      - 'packages/bridge/**'
-      - 'packages/windows-agent/**'
+      - 'packages/**'
+      - 'tests/contracts/**'
+      - 'platforms/windows/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/windows-desktop.yml'
   workflow_dispatch:
@@ -33,15 +35,15 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Core invariants (no desktop access)
-        run: dotnet run --project packages/windows-agent/tests/Core/Core.csproj
+        run: dotnet run --project platforms/windows/tests/Core/Core.csproj
       - name: Compile Windows integration tests
-        run: dotnet build packages/windows-agent/tests/Integration/Integration.csproj
+        run: dotnet build platforms/windows/tests/Integration/Integration.csproj
       - name: UIA and WGC against isolated fixture windows
         if: matrix.architecture == 'x64'
-        run: dotnet run --no-build --project packages/windows-agent/tests/Integration/Integration.csproj
+        run: dotnet run --no-build --project platforms/windows/tests/Integration/Integration.csproj
       - name: Publish self-contained executor for the target architecture
         run: >-
-          dotnet publish packages/windows-agent/AgentBridgeLens.Windows.csproj
+          dotnet publish platforms/windows/AgentBridgeLens.Windows.csproj
           --configuration Release --runtime win-${{ matrix.architecture }} --self-contained true
           -p:RestoreLockedMode=true --output packages/bridge/windows-agent/win-${{ matrix.architecture }}
       - uses: pnpm/action-setup@v4

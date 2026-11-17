@@ -37,7 +37,7 @@ export async function packageBridge(cwd, tag) {
   await mkdir(out, { recursive: true });
   execFileSync("pnpm", ["--dir", directory, "build"], { cwd, stdio: "inherit" });
   // Pack exactly the artifact that will be installed, smoke-tested, and published.
-  execFileSync("npm", ["pack", "--pack-destination", out], { cwd: directory, stdio: "inherit" });
+  execFileSync("pnpm", ["pack", "--pack-destination", out], { cwd: directory, stdio: "inherit" });
   const filename = `agentbridgelens-${version}.tgz`;
   const hash = createHash("sha256").update(await readFile(join(out, filename))).digest("hex");
   await writeFile(join(out, `${filename}.sha256`), `${hash}  ${filename}\n`);

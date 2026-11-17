@@ -7,7 +7,7 @@ namespace AgentBridgeLens.Windows;
 
 internal static class Program
 {
-    private sealed record Request(string? Id, string Tool, JsonElement Parameters, WorkContext Context);
+    private sealed record Request(string? Id, string Tool, JsonElement Parameters, WorkContext Context, CancellationTokenSource? Cancellation = null);
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     [MTAThread]
@@ -19,6 +19,7 @@ internal static class Program
         var outputLock = new object();
         var cancellationLock = new object();
         var cancellation = new CancellationTokenSource();
+        var active = new Dictionary<string, CancellationTokenSource>();
         int revokeRequested = 0;
         void Reply(string? id, object? result = null, Exception? error = null)
         {
@@ -56,6 +57,12 @@ internal static class Program
                         using var document = JsonDocument.Parse(line);
                         var root = document.RootElement;
                         id = root.Required("id");
+                        if (root.Text("type") == "cancel")
+                        {
+                            lock (cancellationLock)
+                                if (active.TryGetValue(id, out var requestCancellation)) requestCancellation.Cancel();
+                            continue;
+                        }
                         var tool = root.Required("tool");
                         if (!root.TryGetProperty("params", out var parameters) || parameters.ValueKind != JsonValueKind.Object)
                             throw new DesktopException("INVALID_REQUEST", "params must be an object.");
@@ -67,8 +74,14 @@ internal static class Program
                                 Interlocked.Exchange(ref revokeRequested, 1);
                             }
                             var timeout = tool == "desktop_start_session" ? 110_000 : tool == "desktop_wait_for" ? parameters.Integer("timeoutMs", 10000, 1, 30000) : 30000;
-                            if (!requests.TryAdd(new(id, tool, parameters.Clone(), new(cancellation.Token, TimeSpan.FromMilliseconds(timeout)))))
+                            if (active.ContainsKey(id)) throw new DesktopException("INVALID_REQUEST", "Duplicate in-flight request id.");
+                            var requestSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+                            active[id] = requestSource;
+                            if (!requests.TryAdd(new(id, tool, parameters.Clone(), new(requestSource.Token, TimeSpan.FromMilliseconds(timeout)), requestSource)))
+                            {
+                                active.Remove(id); requestSource.Dispose();
                                 throw new DesktopException("QUEUE_FULL", "Desktop request queue is full.");
+                            }
                         }
                     }
                     catch (Exception error) { Reply(id, error: error); }
@@ -94,6 +107,14 @@ internal static class Program
                 Reply(request.Id, agent.Dispatch(request.Tool, request.Parameters, request.Context));
             }
             catch (Exception error) { Reply(request.Id, error: error); }
+            finally
+            {
+                lock (cancellationLock)
+                {
+                    if (request.Id != null) active.Remove(request.Id);
+                    request.Cancellation?.Dispose();
+                }
+            }
         }
     }
     private static string? ReadLine()

@@ -1,0 +1,23 @@
+{
+  "name": "@agentbridgelens/browser-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentbridgelens/protocol": "workspace:*",
+    "@agentbridgelens/runtime": "workspace:*",
+    "ws": "^8.18.0",
+    "@jridgewell/trace-mapping": "^0.3.25"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.0"
+  }
+}

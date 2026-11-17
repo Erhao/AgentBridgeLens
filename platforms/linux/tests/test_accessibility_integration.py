@@ -9,7 +9,7 @@ import threading
 import time
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "linux-agent"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "agent"))
 from common import Context, DesktopError
 from main import Agent
 
@@ -24,7 +24,7 @@ class AccessibilityIntegration(unittest.TestCase):
         self.addCleanup(service.close)
         fixture = subprocess.Popen(["/usr/bin/python3", str(pathlib.Path(__file__).with_name("gtk_fixture.py"))],
             stdout=subprocess.PIPE, env={**os.environ, "GTK_MODULES": "atk-bridge", "NO_AT_BRIDGE": "0"})
-        worker = subprocess.Popen(["/usr/bin/python3", "-u", str(pathlib.Path(__file__).resolve().parents[2] / "linux-agent" / "main.py")],
+        worker = subprocess.Popen(["/usr/bin/python3", "-u", str(pathlib.Path(__file__).resolve().parents[1] / "agent" / "main.py")],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 
         def cleanup():

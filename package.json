@@ -1,5 +1,5 @@
 {
-  "name": "agentbridgelens",
+  "name": "agentbridgelens-workspace",
   "private": true,
   "packageManager": "pnpm@10.33.3",
   "scripts": {
@@ -11,7 +11,10 @@
     "test:release": "node --test scripts/release/*.test.mjs",
     "release": "semantic-release",
     "release:dry-run": "semantic-release --dry-run",
-    "test:updater": "node --test scripts/update/*.test.mjs"
+    "test:updater": "node --test scripts/update/*.test.mjs",
+    "test:contracts": "node --test tests/contracts/*.test.mjs",
+    "test:desktop": "pnpm --dir packages/bridge test && pnpm test:contracts",
+    "test:linux": "python3 -m unittest discover -s platforms/linux/tests -p \"test_*.py\" -v"
   },
   "devDependencies": {
     "@semantic-release/commit-analyzer": "13.0.1",

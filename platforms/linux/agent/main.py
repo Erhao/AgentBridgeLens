@@ -87,6 +87,8 @@ def serve():
     requests = queue.Queue(maxsize=33)  # One slot reserved for stop by the Bridge.
     cancel = threading.Event()
     output_lock = threading.Lock()
+    cancellation_lock = threading.Lock()
+    request_cancellations = {}
 
     def reply(value):
         with output_lock:
@@ -108,6 +110,12 @@ def serve():
                         raise DesktopError("INVALID_REQUEST", "JSON request exceeds 1 MiB or is not newline-terminated")
                     request = json.loads(line)
                     request_id = request.get("id")
+                    if request.get("type") == "cancel":
+                        with cancellation_lock:
+                            event = request_cancellations.get(request_id)
+                            if event is not None:
+                                event.set()
+                        continue
                     if not isinstance(request_id, str) or not isinstance(request.get("tool"), str) or not isinstance(request.get("params", {}), dict):
                         raise DesktopError("INVALID_REQUEST", "Expected id, tool and params object")
                     if request["tool"] == "desktop_stop":
@@ -116,7 +124,17 @@ def serve():
                     timeout = 110 if request["tool"] == "desktop_start_session" else 30
                     if request["tool"] == "desktop_wait_for":
                         timeout = max(0.001, min(30, request["params"].get("timeoutMs", 10_000) / 1000))
-                    requests.put_nowait((request, Context(cancel, timeout)))
+                    with cancellation_lock:
+                        if request_id in request_cancellations:
+                            raise DesktopError("INVALID_REQUEST", "Duplicate in-flight request id")
+                        request_cancel = threading.Event()
+                        request_cancellations[request_id] = request_cancel
+                    try:
+                        requests.put_nowait((request, Context(cancel, timeout, request_cancel)))
+                    except Exception:
+                        with cancellation_lock:
+                            request_cancellations.pop(request_id, None)
+                        raise
                 except Exception as error:
                     reply({"id": request_id, "error": {"code": getattr(error, "code", "INVALID_REQUEST"), "message": str(error)}})
         finally:
@@ -142,6 +160,9 @@ def serve():
                 reply({"id": request["id"], "result": result})
             except Exception as error:
                 reply({"id": request["id"], "error": {"code": getattr(error, "code", "DESKTOP_ERROR"), "message": str(error)}})
+            finally:
+                with cancellation_lock:
+                    request_cancellations.pop(request["id"], None)
     finally:
         cancel.set()
         agent.portal.close()

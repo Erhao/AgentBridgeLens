@@ -37,6 +37,7 @@ jobs:
           path: packages/bridge/windows-agent/win-arm64
       - run: pnpm typecheck
       - run: pnpm --dir packages/bridge test
+      - run: pnpm test:contracts
       - run: node --test scripts/release/bridge.test.mjs
       - name: Build versioned npm package and checksum
         env:

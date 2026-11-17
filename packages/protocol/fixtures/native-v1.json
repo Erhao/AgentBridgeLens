@@ -1,0 +1,6 @@
+{
+  "hello": {"type":"hello","protocolVersion":1,"deviceId":"fixture-mac","version":"0.1.2","capabilities":["windows","accessibility"]},
+  "request": {"type":"request","id":"fixture-request","tool":"mac_observe","params":{"windowRef":"fixture-window"}},
+  "response": {"type":"response","id":"fixture-request","result":{"snapshotId":"fixture-snapshot","elements":[]}},
+  "cancel": {"type":"cancel","id":"fixture-request"}
+}

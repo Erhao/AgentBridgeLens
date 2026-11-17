@@ -139,7 +139,7 @@ Bridge 测试构建的是 Bridge，不构建扩展安装包：
 ```bash
 pnpm --dir packages/bridge typecheck
 pnpm --dir packages/bridge test
-/usr/bin/python3 -m unittest discover -s packages/bridge/test/linux -p 'test_*.py' -v
+/usr/bin/python3 -m unittest discover -s platforms/linux/tests -p 'test_*.py' -v
 ```
 
 图形集成测试额外需要 GTK3、Xvfb、xauth 与 D-Bus 测试工具：
@@ -147,7 +147,7 @@ pnpm --dir packages/bridge test
 ```bash
 sudo apt install gir1.2-gtk-3.0 xvfb xauth dbus-x11
 dbus-run-session -- xvfb-run -a env ABL_DESKTOP_INTEGRATION=1 GIO_USE_VFS=local \
-  /usr/bin/python3 -m unittest discover -s packages/bridge/test/linux -p 'test_*.py' -v
+  /usr/bin/python3 -m unittest discover -s platforms/linux/tests -p 'test_*.py' -v
 ```
 
 该命令创建独立总线和虚拟显示器，不向当前用户的真实桌面发送输入。测试覆盖真实 GTK 窗口、中文/Emoji 文本读回、密码文本省略、按钮动作、状态等待、引用失效、分数缩放、取消后释放按键，以及通过真实 D-Bus 传输的模拟 Portal 授权/拒绝/撤销/取消。GStreamer 使用测试画面源验证 PNG 编码；GNOME 合成器和真实 PipeWire 屏幕源未被模拟测试证明可用。

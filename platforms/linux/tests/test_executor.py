@@ -4,10 +4,25 @@ import threading
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "linux-agent"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "agent"))
 from common import Context, DesktopError, References
 from main import Agent
 from portal import Portal, pixel_to_logical
+
+
+class CancellationTest(unittest.TestCase):
+    def test_request_cancellation_does_not_cancel_sibling_and_stop_cancels_both(self):
+        stop = threading.Event()
+        a, b = threading.Event(), threading.Event()
+        first, second = Context(stop, 30, a), Context(stop, 30, b)
+        a.set()
+        with self.assertRaises(DesktopError) as caught:
+            first.check()
+        self.assertEqual(caught.exception.code, "CANCELLED")
+        second.check()
+        stop.set()
+        with self.assertRaises(DesktopError):
+            second.check()
 
 
 class ReferencesTest(unittest.TestCase):

@@ -1,0 +1,21 @@
+{
+  "name": "@agentbridgelens/runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "@agentbridgelens/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.0"
+  }
+}

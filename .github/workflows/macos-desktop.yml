@@ -1,0 +1,34 @@
+name: macOS desktop checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platforms/macos/**"
+      - "packages/**"
+      - "tests/contracts/**"
+      - "scripts/build/**"
+      - "scripts/test/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/macos-desktop.yml"
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm --dir packages/bridge test
+      - run: pnpm test:contracts
+      - name: Compile native app and run Swift core checks
+        run: bash scripts/build/macos.sh
+      - name: Real native client through unified MCP
+        run: node scripts/test/macos-transport.mjs

@@ -10,7 +10,7 @@ import sys
 import threading
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "linux-agent"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "agent"))
 from common import Context, DesktopError, binding
 from portal import DEST, PATH, PREFIX, Portal
 

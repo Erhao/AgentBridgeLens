@@ -21,6 +21,7 @@ enum BridgeCoreChecks {
         try wireRoundTripAndMalformedArguments()
         try mcpConfigurationResolvesPathsAndValidatesPorts()
         try remoteBridgeAddressPolicy()
+        try desktopControlConsentIsSingleConnection()
         if let path = CommandLine.arguments.dropFirst().first {
             let fixture = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
             let decode = { (value: JSONValue) throws -> WireMessage in
@@ -111,6 +112,33 @@ enum BridgeCoreChecks {
         }
         try expect(RemoteBridgeEndpoint.validToken(String(repeating: "a-", count: 16)))
         try expect(!RemoteBridgeEndpoint.validToken(String(repeating: "x ", count: 16)))
+    }
+
+    static func desktopControlConsentIsSingleConnection() throws {
+        var consent: DesktopControlConsent = .off
+        consent.connectionDidAuthenticate(accessibility: true)
+        try expect(consent == .off, "Connecting alone must not enable control")
+
+        consent.setRequested(true, connected: false, accessibility: true)
+        try expect(consent == .waitingForConnection)
+        consent.connectionDidEnd()
+        try expect(consent == .waitingForConnection, "Failed attempts must preserve the pending request")
+        consent.connectionDidAuthenticate(accessibility: true)
+        try expect(consent == .active)
+        consent.connectionDidEnd()
+        consent.connectionDidAuthenticate(accessibility: true)
+        try expect(consent == .off, "Reconnect must not reuse consent")
+
+        consent.setRequested(true, connected: false, accessibility: true)
+        consent.connectionDidAuthenticate(accessibility: false)
+        try expect(consent == .off, "Permission loss must prevent activation")
+
+        consent.setRequested(true, connected: false, accessibility: true)
+        consent.setRequested(false, connected: false, accessibility: true)
+        consent.connectionDidAuthenticate(accessibility: true)
+        try expect(consent == .off, "Turning the switch off cancels pending consent")
+        consent.setRequested(true, connected: true, accessibility: true)
+        try expect(consent == .active, "Users can still enable an existing connection")
     }
 
 }

@@ -73,14 +73,18 @@ private struct DesktopMenu: View {
 
     var body: some View {
         Text(client.connection.title)
-        Text(client.controlEnabled ? "桌面控制已开启" : "桌面控制已关闭")
+        switch client.controlConsent {
+        case .off: Text("桌面控制已关闭")
+        case .waitingForConnection: Text("已允许下一次连接控制")
+        case .active: Text("桌面控制已开启")
+        }
         Button("打开 AgentBridgeLens") {
             openWindow(id: "dashboard")
             NSApp.activate(ignoringOtherApps: true)
         }
         Divider()
         Button("停止桌面控制") { client.stop() }
-            .disabled(!client.controlEnabled && client.pendingCount == 0)
+            .disabled(!client.controlRequested && client.pendingCount == 0)
         Button("断开桌面连接") { client.disconnect() }
             .disabled(client.connection == .disconnected)
         Divider()

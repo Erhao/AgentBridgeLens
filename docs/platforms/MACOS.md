@@ -7,11 +7,13 @@ AgentBridgeLens 支持 macOS 14.2 及以上版本。桌面应用内置 Node 运�
 1. 从[统一制品库](https://gitea.xinyu1997.tech/xinyu/AgentBridgeLens/packages)下载与你的 Mac 芯片匹配的 DMG。打开磁盘映像，将 AgentBridgeLens 拖入「应用程序」后再启动。
 2. 在「连接客户端」复制 MCP 配置，把其中的 `agentbridgelens` 条目加到支持本机 stdio MCP 的 AI 客户端，然后重载客户端。客户端负责启动 App 内的 Bridge，无需另装 Node 或运行初始化命令。
 3. 回到「概览」，确认连接后可查询桌面能力。在「隐私与权限」授予辅助功能；需要截图时，再单独开启屏幕录制权限。
-4. 桌面控制每次连接默认关闭。需要点击或键入时，在「概览」手动开启。可以从工具栏、菜单栏或应用的「桌面」菜单停止。
+4. 授予辅助功能后，可在「概览」提前开启桌面控制。它在下一次连接完成后生效。停止、断线或切换服务后需要重新开启。可以从工具栏、菜单栏或应用的「桌面」菜单停止。
 
 配置使用 App 当前的绝对路径。移动或改名后，重新复制配置。旧安装如果显示两份应用，请退出旧版并移除旧应用副本。保留应用数据目录中的原有配对文件。使用旧版独立 Bridge 的客户端应先停用旧配置，以免占用同一端口。
 
 在「连接客户端 → 高级设置」可以修改本机配对端口。开发者仍可自行启动 Bridge，并通过 `BRIDGELENS_DESKTOP=1`、`BRIDGELENS_MAC_PORT` 和 `BRIDGELENS_MAC_TOKEN_FILE` 配置。旧 `AGENTBRIDGEMAC_*` 环境变量和 `~/.agentbridgemac/token` 配对路径继续兼容。
+
+在 Vibe Anywhere 中保存自定义 stdio MCP 配置只会保存设置。启动或继续使用匹配 Scope 的 AI 会话时，CLI 才启动本机 Bridge，App 随后握手。连接持续多久取决于该 CLI 进程的生命周期。
 
 ## 连接远程 Bridge
 

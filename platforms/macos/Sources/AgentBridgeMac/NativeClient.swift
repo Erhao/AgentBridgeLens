@@ -34,7 +34,7 @@ enum DesktopConnection: Equatable {
     var detail: String {
         switch self {
         case .disconnected: "在「连接客户端」中重新连接。"
-        case .waitingForClient: "请保持应用运行，并在 AI 客户端中添加或重载 MCP 配置。"
+        case .waitingForClient: "保持应用运行，并启动使用这份 MCP 配置的 AI 会话。"
         case .connecting: "正在等待 Bridge 完成握手。"
         case .connected: "Bridge 已完成握手，可以查询桌面能力。"
         case .problem(let message): message
@@ -56,7 +56,9 @@ final class NativeClient: ObservableObject {
     @Published private(set) var permissions = DesktopPermissions()
     var accessibility: Bool { permissions.accessibility }
     var screenCapture: Bool { permissions.screenCapture }
-    @Published var controlEnabled = false
+    @Published private(set) var controlConsent: DesktopControlConsent = .off
+    var controlEnabled: Bool { controlConsent == .active }
+    var controlRequested: Bool { controlConsent != .off }
     @Published var port: String
     @Published private(set) var mode: BridgeMode
     @Published private(set) var remoteAddress: String
@@ -99,18 +101,31 @@ final class NativeClient: ObservableObject {
     func refreshPermissions() {
         let current = DesktopPermissions()
         if current != permissions { permissions = current }
-        if !accessibility && controlEnabled { stop() }
+        if !accessibility && controlRequested { stop() }
     }
 
     func setControl(_ enabled: Bool) {
         refreshPermissions()
-        controlEnabled = enabled && accessibility && connected
-        gate.setEnabled(controlEnabled)
-        record(controlEnabled ? "用户已开启控制" : "控制已关闭")
+        var next = controlConsent
+        next.setRequested(enabled, connected: connected, accessibility: accessibility)
+        updateControlConsent(next)
+        switch next {
+        case .off: record("控制已关闭")
+        case .waitingForConnection: record("已允许下一次连接控制，等待 Bridge")
+        case .active: record("用户已开启控制")
+        }
+    }
+
+    private func updateControlConsent(_ next: DesktopControlConsent) {
+        guard controlConsent != next else { return }
+        let inputEnabled = next == .active
+        if gate.isEnabled != inputEnabled { gate.setEnabled(inputEnabled) }
+        controlConsent = next
     }
 
     func stop() {
-        gate.stop(); controlEnabled = false
+        gate.stop()
+        updateControlConsent(.off)
         for job in jobs.values { job.cancel() }
         record("已停止：待执行操作已取消，控制已关闭")
     }
@@ -137,8 +152,15 @@ final class NativeClient: ObservableObject {
         start()
     }
 
-    func start() {
+    func reconnect() {
+        // This action retries the saved target. Configuration changes use start()
+        // directly and clear any consent for the previous target.
+        start(keepPendingControl: controlConsent == .waitingForConnection)
+    }
+
+    func start(keepPendingControl: Bool = false) {
         disconnect()
+        if keepPendingControl && accessibility { updateControlConsent(.waitingForConnection) }
         let url: URL
         let remoteToken: String?
         do {
@@ -170,11 +192,14 @@ final class NativeClient: ObservableObject {
                 do { try await self.connectOnce(url: url, remoteToken: remoteToken); delay = 1 }
                 catch {
                     if Task.isCancelled { break }
+                    var next = self.controlConsent
+                    next.connectionDidEnd()
+                    self.gate.stop()
+                    self.updateControlConsent(next)
                     if self.connected { self.record("Bridge 已断开") }
                     self.connection = self.connectionStatus(for: error)
                 }
                 if Task.isCancelled { break }
-                self.controlEnabled = false; self.gate.stop()
                 for job in self.jobs.values { job.cancel() }
                 self.jobs.removeAll()
                 self.pendingCount = 0
@@ -186,7 +211,9 @@ final class NativeClient: ObservableObject {
     }
 
     func disconnect() {
-        sessionId = UUID(); gate.stop(); controlEnabled = false
+        sessionId = UUID()
+        gate.stop()
+        updateControlConsent(.off)
         runner?.cancel(); runner = nil
         for job in jobs.values { job.cancel() }; jobs.removeAll()
         pendingCount = 0
@@ -271,8 +298,12 @@ final class NativeClient: ObservableObject {
                 guard wire.type == "hello_ack", wire.protocolVersion == 1 else { throw BridgeFailure("INVALID_PROTOCOL", "Bridge 协议版本不匹配") }
                 handshakeDeadline.cancel()
                 acknowledged = true
+                refreshPermissions()
+                var next = controlConsent
+                next.connectionDidAuthenticate(accessibility: accessibility)
+                updateControlConsent(next)
                 connection = .connected
-                record("Bridge 已连接，桌面控制关闭")
+                record(controlEnabled ? "Bridge 已连接，预授权的桌面控制已开启" : "Bridge 已连接，桌面控制关闭")
                 continue
             }
             if wire.type == "cancel" {

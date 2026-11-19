@@ -86,7 +86,7 @@ struct DesktopDashboard: View {
                     } label: {
                         Label("停止控制", systemImage: "stop.circle")
                     }
-                    .disabled(!client.controlEnabled && client.pendingCount == 0)
+                    .disabled(!client.controlRequested && client.pendingCount == 0)
                     .help("取消当前请求并关闭桌面控制")
                 }
             }
@@ -134,19 +134,31 @@ struct DesktopDashboard: View {
             GroupBox("桌面控制") {
                 VStack(alignment: .leading, spacing: 10) {
                     Toggle("允许 AI 点击和键入", isOn: Binding(
-                        get: { client.controlEnabled }, set: { client.setControl($0) }
+                        get: { client.controlRequested }, set: { client.setControl($0) }
                     ))
                     .toggleStyle(.switch)
-                    .disabled(!client.connected || !client.accessibility)
-                    Text(client.controlEnabled
-                         ? "AI 可以向当前获准的前台窗口发送操作。你可以随时停止。"
-                         : "连接客户端并授予辅助功能后可开启。接入、断开或停止后需要手动重新开启。")
+                    .disabled(!client.accessibility)
+                    Text(controlHint)
                         .foregroundStyle(.secondary)
                     if !client.accessibility {
                         Button("查看权限") { page = .permissions }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
+        }
+    }
+
+    private var controlHint: String {
+        if !client.accessibility { return "授予辅助功能权限后可开启。" }
+        switch client.controlConsent {
+        case .off:
+            return client.connected
+                ? "开启后，当前连接可以在获准的前台窗口点击和键入。"
+                : "可以提前开启。下一次连接完成后生效，断开或停止后自动关闭。"
+        case .waitingForConnection:
+            return "已允许下一次连接控制。当前正在等待 Bridge，尚未控制桌面。"
+        case .active:
+            return "当前连接可向获准的前台窗口发送操作。你可以随时停止。"
         }
     }
 
@@ -262,7 +274,7 @@ struct DesktopDashboard: View {
                 }
                 Text(client.connection.detail).foregroundStyle(.secondary)
                 HStack {
-                    Button("重新连接", systemImage: "arrow.clockwise") { client.start() }
+                    Button("重新连接", systemImage: "arrow.clockwise") { client.reconnect() }
                     Button("断开连接") { client.disconnect() }
                         .disabled(client.connection == .disconnected)
                 }

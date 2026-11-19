@@ -136,7 +136,7 @@ bridge.example.com {
 
 The AI client uses `https://bridge.example.com/mcp` with the HTTP Bearer token. In the Mac app, choose **远程 Bridge** and enter `wss://bridge.example.com/native` with the Mac pairing token. `BRIDGELENS_MAC_PORT` changes the Mac listener port when 19224 is already taken. The listener is loopback-only. An SSH tunnel from the Mac to the Bridge can expose that listener at a numeric loopback address through `ws://`, if preferred.
 
-One Mac can connect per Bridge. This mode exposes the scoped `desktop_*` tools; the legacy `mac_*` aliases are local-only. Connecting does not enable desktop input. The Mac user can enable it for the current connection and stop it from the menu bar. Disconnecting turns control off.
+One Mac can connect per Bridge. This mode exposes the scoped `desktop_*` tools; the legacy `mac_*` aliases are local-only. Desktop input needs the Mac user’s consent. In Mac app 0.4.1 or later, the user can enable the current connection or preauthorize the next connection to the selected Bridge. The menu bar can revoke either choice. Disconnecting an active connection turns control off.
 
 ## Verification
 

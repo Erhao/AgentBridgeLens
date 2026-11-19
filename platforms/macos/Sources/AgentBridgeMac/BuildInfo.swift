@@ -1,2 +1,2 @@
 import Foundation
-enum BuildInfo { static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.0" } }
+enum BuildInfo { static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.1" } }

@@ -97,6 +97,7 @@ try {
   const loadCommands = execFileSync("/usr/bin/otool", ["-L", binary], { encoding: "utf8" });
   assert.match(loadCommands, /@rpath\/Sparkle\.framework/);
   await readFile(join(installed, "Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"));
+  assert.match(await readFile(join(installed, "Contents/Resources/Sparkle-LICENSE.txt"), "utf8"), /Andy Matuschak/);
   assert.equal(diagnosis.bundleIdentifier, "tech.xinyu.agentbridgemac");
   assert.equal(await realpath(diagnosis.appPath), await realpath(installed));
   assert.equal(typeof diagnosis.accessibility, "boolean");

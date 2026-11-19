@@ -31,6 +31,7 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$resources/AgentBridgeLens.icns"
 install -m 644 "$scratch/MenuLens.png" "$resources/MenuLens.png"
+install -m 644 platforms/macos/Sparkle-LICENSE.txt "$resources/Sparkle-LICENSE.txt"
 
 bash scripts/build/stage-bridge.sh "$resources/bridge"
 bash scripts/build/macos-node.sh "$helpers" "$resources" "$scratch"

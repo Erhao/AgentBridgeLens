@@ -12,6 +12,7 @@ enum Launcher {
             fields["appPath"] = .string(Bundle.main.bundleURL.path)
             fields["bundleIdentifier"] = .string(Bundle.main.bundleIdentifier ?? "")
             fields["bundledBridge"] = .bool(BundledBridge.isAvailable)
+            fields["updateChannelConfigured"] = .bool(AppUpdater.isConfigured)
             let status = JSONValue.object(fields)
             if let data = try? JSONEncoder().encode(status), let value = String(data: data, encoding: .utf8) { print(value) }
             return
@@ -30,6 +31,7 @@ enum Launcher {
 @MainActor
 struct CompanionApp: App {
     @StateObject private var client = NativeClient()
+    @StateObject private var updater = AppUpdater()
 
     private static let menuIcon: NSImage? = {
         guard let url = Bundle.main.url(forResource: "MenuLens", withExtension: "png"),
@@ -46,14 +48,21 @@ struct CompanionApp: App {
         .defaultSize(width: 880, height: 620)
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesButton(updater: updater)
+            }
             CommandMenu("桌面") {
                 Button("停止桌面控制") { client.stop() }
                     .keyboardShortcut(".", modifiers: [.command, .shift])
             }
         }
 
+        Settings {
+            UpdateSettings(updater: updater)
+        }
+
         MenuBarExtra {
-            DesktopMenu(client: client)
+            DesktopMenu(client: client, updater: updater)
         } label: {
             if let icon = Self.menuIcon {
                 Image(nsImage: icon)
@@ -70,6 +79,7 @@ struct CompanionApp: App {
 private struct DesktopMenu: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var client: NativeClient
+    @ObservedObject var updater: AppUpdater
 
     var body: some View {
         Text(client.connection.title)
@@ -88,6 +98,7 @@ private struct DesktopMenu: View {
         Button("断开桌面连接") { client.disconnect() }
             .disabled(client.connection == .disconnected)
         Divider()
+        CheckForUpdatesButton(updater: updater)
         Button("退出 AgentBridgeLens") {
             client.disconnect()
             NSApp.terminate(nil)

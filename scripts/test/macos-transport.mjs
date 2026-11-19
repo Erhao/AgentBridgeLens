@@ -93,6 +93,10 @@ try {
   const diagnosis = JSON.parse(execFileSync(binary, ["--diagnose"], { encoding: "utf8" }));
   assert.equal(diagnosis.version, version);
   assert.equal(diagnosis.bundledBridge, true);
+  assert.equal(diagnosis.updateChannelConfigured, process.env.ABL_REQUIRE_SIGNED_UPDATE === "1");
+  const loadCommands = execFileSync("/usr/bin/otool", ["-L", binary], { encoding: "utf8" });
+  assert.match(loadCommands, /@rpath\/Sparkle\.framework/);
+  await readFile(join(installed, "Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"));
   assert.equal(diagnosis.bundleIdentifier, "tech.xinyu.agentbridgemac");
   assert.equal(await realpath(diagnosis.appPath), await realpath(installed));
   assert.equal(typeof diagnosis.accessibility, "boolean");

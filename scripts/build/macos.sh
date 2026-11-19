@@ -36,17 +36,56 @@ bash scripts/build/stage-bridge.sh "$resources/bridge"
 bash scripts/build/macos-node.sh "$helpers" "$resources" "$scratch"
 identity="${MAC_SIGN_IDENTITY:--}"
 profile="${MAC_NOTARY_PROFILE:-}"
+feed="${MAC_UPDATE_FEED_URL:-}"
+public_key="${SPARKLE_PUBLIC_ED_KEY:-}"
+
 if [[ -n "$profile" && "$identity" == "-" ]]; then
   echo 'Notarization requires a Developer ID signing identity.' >&2
   exit 1
 fi
+
+if [[ -n "$feed" || -n "$public_key" ]]; then
+  if [[ "$identity" != "Developer ID Application: "* || -z "$profile" || "$mode" != package ]]; then
+    echo 'Updates require Developer ID Application signing and notarized packaging.' >&2
+    exit 1
+  fi
+  node --input-type=module - "$feed" "$public_key" <<'JS'
+const [, , address, key] = process.argv;
+const feed = new URL(address);
+if (feed.protocol !== "https:" || feed.username || feed.password || feed.hash || feed.search || !feed.pathname.endsWith("/appcast.xml")) {
+  throw new Error("The update feed must be a credential-free HTTPS appcast.xml URL.");
+}
+if (!/^[A-Za-z0-9+/]{43}=$/.test(key) || Buffer.from(key, "base64").toString("base64") !== key) {
+  throw new Error("Expected the base64 Sparkle Ed25519 public key.");
+}
+JS
+  plutil -insert SUFeedURL -string "$feed" "$app/Contents/Info.plist"
+  plutil -insert SUPublicEDKey -string "$public_key" "$app/Contents/Info.plist"
+fi
+
+sparkle_xcframework="$(find platforms/macos/.build/artifacts -type d -name Sparkle.xcframework -print -quit)"
+sparkle="$app/Contents/Frameworks/Sparkle.framework"
+mkdir -p "$app/Contents/Frameworks"
+ditto "$sparkle_xcframework/macos-arm64_x86_64/Sparkle.framework" "$sparkle"
+sparkle_version="$sparkle/Versions/B"
+sign_options=(--force --sign "$identity")
+if [[ "$identity" != "-" ]]; then sign_options+=(--timestamp --options runtime); fi
+
+# Sign explicit nested components before sealing the framework and outer app.
+for component in "$sparkle_version/XPCServices/Installer.xpc" "$sparkle_version/Autoupdate" "$sparkle_version/Updater.app"; do
+  codesign "${sign_options[@]}" "$component"
+done
+codesign "${sign_options[@]}" --preserve-metadata=entitlements "$sparkle_version/XPCServices/Downloader.xpc"
+codesign "${sign_options[@]}" "$sparkle"
+
 if [[ "$identity" == "-" ]]; then
   codesign --force --sign - "$helpers/node"
-  codesign --force --sign - "$app"
 else
-  codesign --force --sign "$identity" --timestamp --options runtime \
-    --entitlements platforms/macos/NodeEntitlements.plist "$helpers/node"
-  codesign --force --sign "$identity" --timestamp --options runtime "$app"
+  codesign "${sign_options[@]}" --entitlements platforms/macos/NodeEntitlements.plist "$helpers/node"
+fi
+codesign "${sign_options[@]}" "$app"
+if [[ -n "$feed" ]]; then
+  codesign --verify -R='anchor apple generic and identifier "tech.xinyu.agentbridgemac" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists' "$app"
 fi
 codesign --verify --deep --strict "$app"
 

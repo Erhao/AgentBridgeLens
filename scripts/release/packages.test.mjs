@@ -7,6 +7,14 @@ import { join } from "node:path";
 import { packageVersion, publishPackages } from "./packages.mjs";
 
 const sha = "a".repeat(40);
+test("macOS release versions are independent of the Bridge version", () => {
+  assert.equal(packageVersion("0.6.1", "refs/tags/macos-v0.5.0", sha, "0.5.0"), "macos-0.5.0");
+  assert.throws(
+    () => packageVersion("0.6.1", "refs/tags/macos-v0.6.1", sha, "0.5.0"),
+    /macOS release tag/,
+  );
+});
+
 test("release tags match the project version and main builds get unique development versions", () => {
   assert.equal(
     packageVersion("0.1.2", "refs/tags/desktop-v0.1.2", sha),

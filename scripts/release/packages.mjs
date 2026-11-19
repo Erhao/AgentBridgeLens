@@ -6,11 +6,17 @@ import { pathToFileURL } from "node:url";
 const digest = (data) => createHash("sha256").update(data).digest("hex");
 const segment = (value) => encodeURIComponent(value);
 
-export function packageVersion(baseVersion, ref, sha) {
+export function packageVersion(baseVersion, ref, sha, nativeVersion) {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(baseVersion))
     throw new Error("Invalid project version.");
   if (!/^[a-f0-9]{40}$/.test(sha))
     throw new Error("Expected a full Git commit SHA.");
+  if (ref.startsWith("refs/tags/macos-v")) {
+    if (!/^\d+\.\d+\.\d+$/.test(nativeVersion ?? "") || ref !== `refs/tags/macos-v${nativeVersion}`) {
+      throw new Error("macOS release tag must exactly match platforms/macos/version.json.");
+    }
+    return `macos-${nativeVersion}`;
+  }
   if (ref.startsWith("refs/tags/")) {
     if (ref !== `refs/tags/desktop-v${baseVersion}`)
       throw new Error("Release tag must exactly match the project version.");
@@ -182,6 +188,9 @@ if (
       await readFile(join(root, "packages/bridge/package.json"), "utf8"),
     );
     const sha = process.env.GITEA_SHA ?? "";
+    const { version: nativeVersion } = JSON.parse(
+      await readFile(join(root, "platforms/macos/version.json"), "utf8"),
+    );
     await publishPackages({
       serverUrl: process.env.GITEA_SERVER_URL ?? "",
       repository: process.env.GITEA_REPOSITORY ?? "",
@@ -190,12 +199,11 @@ if (
         project.version,
         process.env.GITEA_REF ?? "",
         sha,
+        nativeVersion,
       ),
       baseVersion: project.version,
       sha,
-      nativeVersion: JSON.parse(
-        await readFile(join(root, "platforms/macos/version.json"), "utf8"),
-      ).version,
+      nativeVersion,
       artifactsDir: join(root, "artifacts"),
     });
   } catch (error) {

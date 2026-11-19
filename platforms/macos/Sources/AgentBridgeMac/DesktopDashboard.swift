@@ -32,6 +32,10 @@ struct DesktopDashboard: View {
     @State private var page: DesktopPage? = CommandLine.arguments.contains("--show-permissions")
         ? .permissions : .overview
     @State private var portDraft = ""
+    @State private var selectedMode: BridgeMode = .local
+    @State private var remoteAddressDraft = ""
+    @State private var remoteTokenDraft = ""
+    @State private var remoteError: String?
     @State private var copyFeedback = ""
     @State private var copyError = ""
     @State private var permissionsError: String?
@@ -90,6 +94,8 @@ struct DesktopDashboard: View {
         .frame(minWidth: 700, minHeight: 470)
         .onAppear {
             portDraft = client.port
+            selectedMode = client.mode
+            remoteAddressDraft = client.remoteAddress
             checkPermissions()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -146,9 +152,35 @@ struct DesktopDashboard: View {
 
     private var connection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("AgentBridgeLens 内置 Bridge。将配置添加到支持本地 stdio MCP 的 AI 客户端，再重新加载客户端。")
-                .foregroundStyle(.secondary)
+            Picker("连接方式", selection: $selectedMode) {
+                Text("本机").tag(BridgeMode.local)
+                Text("远程 Bridge").tag(BridgeMode.remote)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedMode) { _, _ in
+                copyFeedback = ""
+                remoteTokenDraft = ""
+            }
 
+            if selectedMode == .remote {
+                remoteSettings
+            } else {
+                localSettings
+            }
+            connectionStatus
+        }
+        .alert("复制失败", isPresented: Binding(
+            get: { !copyError.isEmpty }, set: { if !$0 { copyError = "" } }
+        )) { Button("好", role: .cancel) {} } message: { Text(copyError) }
+    }
+
+    private var localSettings: some View {
+        Group {
+            Text("将内置 Bridge 的配置添加到支持本地 stdio MCP 的 AI 客户端，然后重载客户端。")
+                .foregroundStyle(.secondary)
+            if client.mode != .local {
+                Button("切换到本机 Bridge") { client.useLocalBridge() }
+            }
             GroupBox("客户端配置") {
                 VStack(alignment: .leading, spacing: 12) {
                     if let configuration = try? BundledBridge.configuration(port: client.port, tokenFile: client.tokenFile) {
@@ -171,23 +203,6 @@ struct DesktopDashboard: View {
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
 
-            GroupBox("连接状态") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(client.connection.title).font(.headline)
-                    Text(client.connection.detail).foregroundStyle(.secondary)
-                    HStack {
-                        Button("重新连接", systemImage: "arrow.clockwise") { client.start() }
-                        Button("断开连接") { client.disconnect() }
-                            .disabled(client.connection == .disconnected)
-                    }
-                    if client.connected {
-                        Button("复制验证指令") {
-                            copy("请调用 AgentBridgeLens 的 desktop_get_capabilities，告诉我本机桌面连接和权限状态。")
-                        }
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
-            }
-
             DisclosureGroup("高级设置") {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -205,9 +220,59 @@ struct DesktopDashboard: View {
                 }.padding(.vertical, 8)
             }
         }
-        .alert("复制失败", isPresented: Binding(
-            get: { !copyError.isEmpty }, set: { if !$0 { copyError = "" } }
-        )) { Button("好", role: .cancel) {} } message: { Text(copyError) }
+    }
+
+    private var remoteSettings: some View {
+        GroupBox("远程 Bridge") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Mac 连接到你部署的 Bridge，另一台设备上的 AI 客户端通过该服务调用桌面工具。")
+                    .foregroundStyle(.secondary)
+                TextField("WebSocket 地址", text: $remoteAddressDraft, prompt: Text("wss://bridge.example.com/native"))
+                SecureField("配对令牌", text: $remoteTokenDraft)
+                Text("使用服务器的 Mac 配对令牌。令牌存入钥匙串，之前保存过的地址可以留空令牌。")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("连接远程 Bridge") {
+                    do {
+                        try client.useRemoteBridge(address: remoteAddressDraft, token: remoteTokenDraft)
+                        remoteAddressDraft = client.remoteAddress
+                        remoteTokenDraft = ""
+                        remoteError = nil
+                    } catch {
+                        remoteError = error.localizedDescription
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                if let remoteError {
+                    Label(remoteError, systemImage: "exclamationmark.circle")
+                        .foregroundStyle(.red)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+        }
+    }
+
+    private var connectionStatus: some View {
+        GroupBox("连接状态") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(client.connection.title).font(.headline)
+                if client.mode == .remote {
+                    Text(client.remoteAddress).textSelection(.enabled).foregroundStyle(.secondary)
+                } else {
+                    Text("本机 Bridge").foregroundStyle(.secondary)
+                }
+                Text(client.connection.detail).foregroundStyle(.secondary)
+                HStack {
+                    Button("重新连接", systemImage: "arrow.clockwise") { client.start() }
+                    Button("断开连接") { client.disconnect() }
+                        .disabled(client.connection == .disconnected)
+                }
+                if client.connected {
+                    Button("复制验证指令") {
+                        copy("请调用 AgentBridgeLens 的 desktop_get_capabilities，告诉我 Mac 桌面连接和权限状态。")
+                    }
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+        }
     }
 
     private var permissions: some View {
@@ -368,7 +433,7 @@ struct DesktopDashboard: View {
         client.port = String(port)
         portDraft = client.port
         copyFeedback = ""
-        client.start()
+        client.useLocalBridge()
     }
 
     private func copy(_ text: String) {

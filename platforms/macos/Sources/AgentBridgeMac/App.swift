@@ -31,6 +31,14 @@ enum Launcher {
 struct CompanionApp: App {
     @StateObject private var client = NativeClient()
 
+    private static let menuIcon: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "MenuLens", withExtension: "png"),
+              let icon = NSImage(contentsOf: url) else { return nil }
+        icon.size = NSSize(width: 18, height: 18)
+        icon.isTemplate = true
+        return icon
+    }()
+
     var body: some Scene {
         Window("AgentBridgeLens", id: "dashboard") {
             DesktopDashboard(client: client)
@@ -44,11 +52,16 @@ struct CompanionApp: App {
             }
         }
 
-        MenuBarExtra(
-            "AgentBridgeLens",
-            systemImage: client.controlEnabled ? "cursorarrow.click.2" : "macwindow"
-        ) {
+        MenuBarExtra {
             DesktopMenu(client: client)
+        } label: {
+            if let icon = Self.menuIcon {
+                Image(nsImage: icon)
+                    .accessibilityLabel("AgentBridgeLens")
+            } else {
+                Image(systemName: "circle.circle")
+                    .accessibilityLabel("AgentBridgeLens")
+            }
         }
     }
 }
@@ -60,6 +73,7 @@ private struct DesktopMenu: View {
 
     var body: some View {
         Text(client.connection.title)
+        Text(client.controlEnabled ? "桌面控制已开启" : "桌面控制已关闭")
         Button("打开 AgentBridgeLens") {
             openWindow(id: "dashboard")
             NSApp.activate(ignoringOtherApps: true)

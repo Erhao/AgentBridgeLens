@@ -2,6 +2,22 @@ import AppKit
 import ApplicationServices
 import BridgeCore
 
+enum BridgeMode: String, Hashable {
+    case local, remote
+}
+
+// A paired credential may only be sent to the URL the user chose.
+private final class BridgeSessionDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+}
+
 enum DesktopConnection: Equatable {
     case disconnected, waitingForClient, connecting, connected, problem(String)
 
@@ -19,8 +35,8 @@ enum DesktopConnection: Equatable {
         switch self {
         case .disconnected: "在「连接客户端」中重新连接。"
         case .waitingForClient: "请保持应用运行，并在 AI 客户端中添加或重载 MCP 配置。"
-        case .connecting: "正在等待本机 Bridge 完成握手。"
-        case .connected: "本机 Bridge 已完成握手，可以查询桌面能力。"
+        case .connecting: "正在等待 Bridge 完成握手。"
+        case .connected: "Bridge 已完成握手，可以查询桌面能力。"
         case .problem(let message): message
         }
     }
@@ -42,6 +58,11 @@ final class NativeClient: ObservableObject {
     var screenCapture: Bool { permissions.screenCapture }
     @Published var controlEnabled = false
     @Published var port: String
+    @Published private(set) var mode: BridgeMode
+    @Published private(set) var remoteAddress: String
+    private lazy var websocketSession = URLSession(
+        configuration: .ephemeral, delegate: BridgeSessionDelegate(), delegateQueue: nil
+    )
     @Published private(set) var activity: [DesktopActivity] = []
     let gate = ControlGate()
     private lazy var engine = DesktopEngine(gate: gate)
@@ -56,6 +77,14 @@ final class NativeClient: ObservableObject {
         let environment = ProcessInfo.processInfo.environment
         port = environment["BRIDGELENS_MAC_PORT"] ?? environment["AGENTBRIDGEMAC_PORT"]
             ?? UserDefaults.standard.string(forKey: "bridgePort") ?? "19224"
+        if smoke, let endpoint = environment["ABL_MAC_SMOKE_REMOTE_URL"] {
+            mode = .remote
+            remoteAddress = endpoint
+        } else {
+            let defaults = UserDefaults.standard
+            mode = smoke ? .local : BridgeMode(rawValue: defaults.string(forKey: "bridgeMode") ?? "") ?? .local
+            remoteAddress = smoke ? "" : defaults.string(forKey: "remoteBridgeURL") ?? ""
+        }
         if !smoke { Task { [weak self] in self?.start() } }
     }
 
@@ -86,19 +115,59 @@ final class NativeClient: ObservableObject {
         record("已停止：待执行操作已取消，控制已关闭")
     }
 
+    func useLocalBridge() {
+        mode = .local
+        UserDefaults.standard.set(mode.rawValue, forKey: "bridgeMode")
+        start()
+    }
+
+    func useRemoteBridge(address: String, token: String) throws {
+        let endpoint = try RemoteBridgeEndpoint(address).url
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if token.isEmpty {
+            _ = try RemoteBridgeCredential.read(endpoint: endpoint)
+        } else {
+            try RemoteBridgeCredential.save(token, endpoint: endpoint)
+        }
+
+        mode = .remote
+        remoteAddress = endpoint.absoluteString
+        UserDefaults.standard.set(mode.rawValue, forKey: "bridgeMode")
+        UserDefaults.standard.set(remoteAddress, forKey: "remoteBridgeURL")
+        start()
+    }
+
     func start() {
         disconnect()
-        guard let number = MCPConfiguration.validPort(port) else {
-            connection = .problem("本机端口须为 1024–65535。")
+        let url: URL
+        let remoteToken: String?
+        do {
+            if mode == .remote {
+                url = try RemoteBridgeEndpoint(remoteAddress).url
+                if smoke, let fixtureToken = ProcessInfo.processInfo.environment["ABL_MAC_SMOKE_REMOTE_TOKEN"] {
+                    remoteToken = fixtureToken
+                } else {
+                    remoteToken = try RemoteBridgeCredential.read(endpoint: url)
+                }
+            } else {
+                guard let number = MCPConfiguration.validPort(port),
+                      let localURL = URL(string: "ws://127.0.0.1:\(number)/native") else {
+                    throw BridgeFailure("INVALID_PORT", "本机端口须为 1024–65535。")
+                }
+                url = localURL
+                remoteToken = nil
+                if !smoke { UserDefaults.standard.set(port, forKey: "bridgePort") }
+            }
+        } catch {
+            connection = connectionStatus(for: error)
             return
         }
-        connection = .waitingForClient
-        if !smoke { UserDefaults.standard.set(port, forKey: "bridgePort") }
+        connection = mode == .remote ? .connecting : .waitingForClient
         runner = Task { [weak self] in
             var delay: UInt64 = 1
             while !Task.isCancelled {
                 guard let self else { return }
-                do { try await self.connectOnce(port: number); delay = 1 }
+                do { try await self.connectOnce(url: url, remoteToken: remoteToken); delay = 1 }
                 catch {
                     if Task.isCancelled { break }
                     if self.connected { self.record("Bridge 已断开") }
@@ -131,11 +200,18 @@ final class NativeClient: ObservableObject {
         }
         switch (error as? URLError)?.code {
         case .cannotConnectToHost, .networkConnectionLost, .timedOut:
-            return .waitingForClient
+            return mode == .remote
+                ? .problem("无法连接远程 Bridge。请核对地址、网络和服务状态，App 会自动重试。")
+                : .waitingForClient
+        case .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot, .secureConnectionFailed:
+            return .problem("远程 Bridge 的 TLS 连接未通过验证。请检查域名和证书。")
         case .badServerResponse, .userAuthenticationRequired:
-            return .problem("本机 Bridge 拒绝连接。请检查端口、配对或是否有另一个已连接的实例。")
+            return .problem("Bridge 拒绝连接。请核对配对令牌，并确认该桌面连接没有被占用。")
         default:
-            return .problem("握手未完成。请重载 AI 客户端的 MCP 配置后重试。")
+            return mode == .remote
+                ? .problem("远程握手未完成。请检查地址和远程 Bridge 版本。")
+                : .problem("握手未完成。请重载 AI 客户端的 MCP 配置后重试。")
         }
     }
 
@@ -155,15 +231,21 @@ final class NativeClient: ObservableObject {
         return value
     }
 
-    private func connectOnce(port: Int) async throws {
-        let token = try loadToken(), currentSession = UUID()
+    private func connectOnce(url: URL, remoteToken: String?) async throws {
+        let token = try remoteToken ?? loadToken()
+        let currentSession = UUID()
         sessionId = currentSession
-        var request = URLRequest(url: URL(string: "ws://127.0.0.1:\(port)/native")!)
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
-        let ws = URLSession.shared.webSocketTask(with: request)
+        let ws = websocketSession.webSocketTask(with: request)
         ws.maximumMessageSize = 12 * 1024 * 1024
         socket = ws; ws.resume()
+        let handshakeDeadline = Task {
+            do { try await Task.sleep(for: .seconds(10)) } catch { return }
+            ws.cancel(with: .goingAway, reason: nil)
+        }
+        defer { handshakeDeadline.cancel() }
         // Keep stable waiting UI while retrying a client which hasn't started yet.
         var hello = WireMessage(type: "hello")
         hello.protocolVersion = 1; hello.version = BuildInfo.version; hello.capabilities = DesktopEngine.capabilities
@@ -187,7 +269,10 @@ final class NativeClient: ObservableObject {
             let wire = try JSONDecoder().decode(WireMessage.self, from: data)
             if !acknowledged {
                 guard wire.type == "hello_ack", wire.protocolVersion == 1 else { throw BridgeFailure("INVALID_PROTOCOL", "Bridge 协议版本不匹配") }
-                acknowledged = true; connection = .connected; record("Bridge 已连接，桌面控制关闭")
+                handshakeDeadline.cancel()
+                acknowledged = true
+                connection = .connected
+                record("Bridge 已连接，桌面控制关闭")
                 continue
             }
             if wire.type == "cancel" {

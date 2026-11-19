@@ -42,12 +42,15 @@ export class MacDesktop implements DesktopExecutor {
   };
   private closed = false;
   private generation = 0;
-  constructor(readonly channel: Endpoint) {}
-  static async create() {
+  constructor(
+    readonly channel: Endpoint,
+    readonly remote = false,
+  ) {}
+  static async create(remoteToken?: string) {
     const port = readPort(
       process.env.BRIDGELENS_MAC_PORT ?? process.env.AGENTBRIDGEMAC_PORT,
     );
-    const token = readToken(
+    const token = remoteToken ?? readToken(
       process.env.BRIDGELENS_MAC_TOKEN_FILE ??
         process.env.AGENTBRIDGEMAC_TOKEN_FILE,
     );
@@ -61,7 +64,7 @@ export class MacDesktop implements DesktopExecutor {
     console.error(
       `[BridgeLens] Mac native companion ws://127.0.0.1:${port}/native`,
     );
-    return new MacDesktop(channel);
+    return new MacDesktop(channel, remoteToken !== undefined);
   }
   private sync() {
     if (this.seenSession !== this.channel.status.sessionId) {

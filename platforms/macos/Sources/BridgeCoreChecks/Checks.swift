@@ -20,6 +20,7 @@ enum BridgeCoreChecks {
         try retinaAndNegativeDisplayOriginMapping()
         try wireRoundTripAndMalformedArguments()
         try mcpConfigurationResolvesPathsAndValidatesPorts()
+        try remoteBridgeAddressPolicy()
         if let path = CommandLine.arguments.dropFirst().first {
             let fixture = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
             let decode = { (value: JSONValue) throws -> WireMessage in
@@ -33,7 +34,7 @@ enum BridgeCoreChecks {
             try expect(cancel.type == "cancel" && cancel.id == request.id)
             print("PASS: shared native wire fixture decoded by Swift.")
         }
-        print("PASS: 6 Swift core checks (stop, cancellation, snapshot lifetime, coordinates, protocol, app configuration).")
+        print("PASS: Swift core checks including local configuration and remote address policy.")
     }
     static func stopInvalidatesQueuedInputAndRequiresLocalEnable() throws {
         let gate = ControlGate()
@@ -93,6 +94,23 @@ enum BridgeCoreChecks {
         try expectThrows {
             _ = try MCPConfiguration(executablePath: "relative", port: "19224", tokenFile: tokenFile)
         }
+    }
+
+    static func remoteBridgeAddressPolicy() throws {
+        let publicEndpoint = try RemoteBridgeEndpoint(" WSS://Bridge.example.com ")
+        try expect(publicEndpoint.url.absoluteString == "wss://bridge.example.com/native")
+        let tunnel = try RemoteBridgeEndpoint("ws://127.0.0.1:32124/native")
+        try expect(tunnel.url.port == 32124)
+        for invalid in [
+            "ws://bridge.example.com/native", "https://bridge.example.com/mcp",
+            "wss://user:secret@bridge.example.com/native",
+            "wss://bridge.example.com/native?token=secret", "wss://bridge.example.com/native#foo",
+            "wss://bridge.example.com:99999/native", "wss://bridge.example.com/other"
+        ] {
+            try expectThrows { _ = try RemoteBridgeEndpoint(invalid) }
+        }
+        try expect(RemoteBridgeEndpoint.validToken(String(repeating: "a-", count: 16)))
+        try expect(!RemoteBridgeEndpoint.validToken(String(repeating: "x ", count: 16)))
     }
 
 }

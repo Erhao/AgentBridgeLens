@@ -13,6 +13,16 @@ AgentBridgeLens 支持 macOS 14.2 及以上版本。桌面应用内置 Node 运�
 
 在「连接客户端 → 高级设置」可以修改本机配对端口。开发者仍可自行启动 Bridge，并通过 `BRIDGELENS_DESKTOP=1`、`BRIDGELENS_MAC_PORT` 和 `BRIDGELENS_MAC_TOKEN_FILE` 配置。旧 `AGENTBRIDGEMAC_*` 环境变量和 `~/.agentbridgemac/token` 配对路径继续兼容。
 
+## 连接远程 Bridge
+
+Mac App 0.4.0 与 Bridge 0.6.1 起支持远程模式。macOS App 和 Chrome 扩展可以同时连同一台 Bridge，AI 客户端通过 MCP 分别调用桌面和浏览器工具。服务器每次接收一个 Mac 执行端。桌面工具作用于该 Mac，授权、只读/控制和停止均由运行 App 的 Mac 管理。
+
+1. 在服务器部署新版 Bridge，见[远程 Mac 配置](../../packages/bridge/README.md#remote-mac-app)。
+2. App 打开「连接客户端 → 远程 Bridge」，填写 `wss://你的域名/native` 和服务器的 `BRIDGELENS_MAC_REMOTE_TOKEN`，再点击「连接远程 Bridge」。已有连接会断开，新连接默认关闭桌面控制。App 将令牌保存在 macOS 钥匙串中。
+3. AI 客户端使用服务器上配置的 MCP 入口。远程 HTTP MCP 地址通常为 `https://你的域名/mcp`，使用独立的 `BRIDGELENS_HTTP_TOKEN`。通过 `desktop_get_capabilities` 确认 `platform: darwin` 和 `connected: true`。
+
+通过 SSH 将远程服务器的 19224 转发到本机时，App 的地址可以填 `ws://127.0.0.1:转发端口/native`。其他地址需要 WSS，Mac 会验证证书。原有本机 stdio 配置继续可用。
+
 ## 系统设置已开启，App 仍显示权限不可用
 
 1. 在「隐私与权限」点「重新打开 AgentBridgeLens」，或按 `⌘Q` 完全退出，再从「应用程序」重新打开。录屏权限需要重新启动进程才能生效。

@@ -63,6 +63,10 @@ const TOP = [88, 166, 255]; // 顶部蓝
 const BOT = [37, 99, 235]; // 底部蓝
 const WHITE = [255, 255, 255];
 
+function isLensMark(radius) {
+  return radius <= 0.1 || (radius >= 0.19 && radius <= 0.3);
+}
+
 // 在归一化坐标 (nx,ny ∈ [0,1]) 上判定一个子样本的颜色，返回 [r,g,b,a]（a: 0/255）
 function sample(nx, ny) {
   const px = nx - 0.5;
@@ -85,13 +89,12 @@ function sample(nx, ny) {
 
   // 镜头：白色环 + 中心点
   const rc = Math.hypot(px, py);
-  if (rc >= 0.19 && rc <= 0.3) col = WHITE; // 环
-  else if (rc <= 0.1) col = WHITE; // 中心点
+  if (isLensMark(rc)) col = WHITE;
 
   return [col[0], col[1], col[2], 255];
 }
 
-function render(size) {
+function render(size, samplePixel = sample) {
   const ss = 4; // 超采样倍率
   const rgba = Buffer.alloc(size * size * 4);
   for (let y = 0; y < size; y++) {
@@ -101,7 +104,7 @@ function render(size) {
         for (let sx = 0; sx < ss; sx++) {
           const nx = (x + (sx + 0.5) / ss) / size;
           const ny = (y + (sy + 0.5) / ss) / size;
-          const [pr, pg, pb, pa] = sample(nx, ny);
+          const [pr, pg, pb, pa] = samplePixel(nx, ny);
           if (pa > 0) {
             r += pr;
             g += pg;
@@ -127,4 +130,14 @@ mkdirSync(outDir, { recursive: true });
 for (const size of appIconDirectory ? [1024] : [16, 48, 128, 256]) {
   writeFileSync(join(outDir, `icon${size}.png`), render(size));
   console.log(`wrote icon${size}.png`);
+}
+
+
+// The regular icon and the menu-bar template share the exact same lens geometry.
+// At menu-bar size, keep only the mark and let macOS choose its contrast.
+if (appIconDirectory) {
+  const sampleMenuMark = (nx, ny) => [
+    0, 0, 0, isLensMark(Math.hypot(nx - 0.5, ny - 0.5) * 0.7) ? 255 : 0,
+  ];
+  writeFileSync(join(outDir, "MenuLens.png"), render(72, sampleMenuMark));
 }

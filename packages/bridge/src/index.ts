@@ -25,6 +25,18 @@ if (mode !== "stdio" && mode !== "http") {
 const httpHost = process.env.BRIDGELENS_HTTP_HOST || "127.0.0.1";
 const httpPort = Number(process.env.BRIDGELENS_HTTP_PORT || "19223");
 const httpToken = process.env.BRIDGELENS_HTTP_TOKEN || WS_TOKEN;
+const remoteMacToken = process.env.BRIDGELENS_MAC_REMOTE_TOKEN;
+if (remoteMacToken !== undefined) {
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(remoteMacToken)) {
+    throw new Error("BRIDGELENS_MAC_REMOTE_TOKEN must be 32–128 URL-safe ASCII characters");
+  }
+  if (remoteMacToken === WS_TOKEN || remoteMacToken === httpToken) {
+    throw new Error("The remote Mac token must differ from the browser and MCP tokens");
+  }
+  if (mode === "http" && !process.env.BRIDGELENS_HTTP_TOKEN?.trim()) {
+    throw new Error("Set a separate BRIDGELENS_HTTP_TOKEN for remote Mac access over HTTP");
+  }
+}
 if (mode === "http") {
   if (!Number.isInteger(httpPort) || httpPort < 1 || httpPort > 65535) {
     throw new Error("BRIDGELENS_HTTP_PORT must be an integer between 1 and 65535");
@@ -40,12 +52,14 @@ if (process.argv.includes("--init-mac")) {
   process.exit(0);
 }
 
-if (process.env.BRIDGELENS_DESKTOP === "1" && !["linux", "win32", "darwin"].includes(process.platform)) {
+if (!remoteMacToken && process.env.BRIDGELENS_DESKTOP === "1" && !["linux", "win32", "darwin"].includes(process.platform)) {
   throw new Error("BRIDGELENS_DESKTOP=1 supports macOS, Linux and Windows");
 }
-const desktop = process.env.BRIDGELENS_DESKTOP === "1"
-  ? (process.platform === "darwin" ? await MacDesktop.create() : process.platform === "win32" ? new WindowsDesktop() : new LinuxDesktop())
-  : undefined;
+const desktop = remoteMacToken
+  ? await MacDesktop.create(remoteMacToken)
+  : process.env.BRIDGELENS_DESKTOP === "1"
+    ? (process.platform === "darwin" ? await MacDesktop.create() : process.platform === "win32" ? new WindowsDesktop() : new LinuxDesktop())
+    : undefined;
 const relay = new WsRelay({ port: WS_PORT, host: WS_HOST, token: WS_TOKEN });
 process.once("exit", () => desktop?.close());
 try {

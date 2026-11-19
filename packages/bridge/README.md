@@ -112,6 +112,32 @@ The built-in listeners are plain HTTP/WS. Use an SSH tunnel or a TLS reverse
 proxy for encrypted connections. Browser-based MCP clients must have their
 Origin explicitly allowlisted; CORS preflight is supported for these origins.
 
+## Remote Mac app
+
+Bridge 0.6.1 or later can relay requests to a Mac running AgentBridgeLens 0.4.0 or later, even when the Bridge runs on Linux. This is the server-side desktop executor for that Bridge process. The Chrome extension remains on its own listener.
+
+On the server, start the Bridge as follows. Replace both examples with distinct random values (for example, create each with `openssl rand -hex 32`). Keep the existing browser `BRIDGELENS_TOKEN` distinct as well.
+
+```bash
+BRIDGELENS_TRANSPORT=http \
+BRIDGELENS_HTTP_TOKEN='<MCP token>' \
+BRIDGELENS_MAC_REMOTE_TOKEN='<Mac pairing token>' \
+node packages/bridge/dist/index.js
+```
+
+Put the two loopback listeners behind a TLS reverse proxy. For example, this Caddy configuration preserves the path and forwards WebSocket upgrades. The browser listener can retain its own existing configuration.
+
+```caddyfile
+bridge.example.com {
+    reverse_proxy /mcp 127.0.0.1:19223
+    reverse_proxy /native 127.0.0.1:19224
+}
+```
+
+The AI client uses `https://bridge.example.com/mcp` with the HTTP Bearer token. In the Mac app, choose **远程 Bridge** and enter `wss://bridge.example.com/native` with the Mac pairing token. `BRIDGELENS_MAC_PORT` changes the Mac listener port when 19224 is already taken. The listener is loopback-only. An SSH tunnel from the Mac to the Bridge can expose that listener at a numeric loopback address through `ws://`, if preferred.
+
+One Mac can connect per Bridge. This mode exposes the scoped `desktop_*` tools; the legacy `mac_*` aliases are local-only. Connecting does not enable desktop input. The Mac user can enable it for the current connection and stop it from the menu bar. Disconnecting turns control off.
+
 ## Verification
 
 ```bash

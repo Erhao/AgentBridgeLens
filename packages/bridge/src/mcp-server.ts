@@ -16,7 +16,7 @@ export function createMcpServer(
   const server = new McpServer({ name: "AgentBridgeLens", version });
   registerBrowserTools(server, relay);
   if (desktop) registerDesktopTools(server, desktop);
-  if (desktop instanceof MacDesktop)
+  if (desktop instanceof MacDesktop && !desktop.remote)
     registerMacCompatibilityTools(server, desktop);
   return server;
 }

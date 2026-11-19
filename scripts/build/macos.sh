@@ -30,6 +30,7 @@ for size in 16 32 128 256 512; do
   sips -z "$retina" "$retina" "$scratch/icon1024.png" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$iconset" -o "$resources/AgentBridgeLens.icns"
+install -m 644 "$scratch/MenuLens.png" "$resources/MenuLens.png"
 
 bash scripts/build/stage-bridge.sh "$resources/bridge"
 bash scripts/build/macos-node.sh "$helpers" "$resources" "$scratch"

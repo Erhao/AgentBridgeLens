@@ -15,9 +15,13 @@ const { Client } = await import(
 const { StdioClientTransport } = await import(
   require.resolve("@modelcontextprotocol/sdk/client/stdio.js")
 );
+const { StreamableHTTPClientTransport } = await import(
+  require.resolve("@modelcontextprotocol/sdk/client/streamableHttp.js")
+);
 const dir = await mkdtemp(join(tmpdir(), "abl-macos-smoke-"));
 let native;
 let client;
+let remoteBridge;
 async function port() {
   const listener = createServer().listen(0, "127.0.0.1");
   await once(listener, "listening");
@@ -58,22 +62,20 @@ try {
     },
     stdio: ["ignore", "ignore", "pipe"],
   });
-  let spawnError;
-  native.on("error", (error) => (spawnError = error));
   const parse = (r) => JSON.parse(r.content[0].text);
-  let caps;
-  for (let i = 0; i < 100; i++) {
-    if (spawnError) throw spawnError;
-    if (native.exitCode !== null) throw new Error("Native client exited");
-    caps = parse(
-      await client.callTool({
-        name: "desktop_get_capabilities",
-        arguments: {},
-      }),
-    );
-    if (caps.connected) break;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  async function waitForMac(process, mcp) {
+    let spawnError;
+    process.on("error", (error) => (spawnError = error));
+    for (let i = 0; i < 100; i++) {
+      if (spawnError) throw spawnError;
+      if (process.exitCode !== null || process.signalCode !== null) throw new Error("Native client exited");
+      const caps = parse(await mcp.callTool({ name: "desktop_get_capabilities", arguments: {} }));
+      if (caps.connected) return caps;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error("Mac app did not connect");
   }
+  const caps = await waitForMac(native, client);
   assert.equal(caps.platform, "darwin");
   assert.equal(caps.native.transportSmokeTest, true);
   const tools = (await client.listTools()).tools;
@@ -95,11 +97,57 @@ try {
   assert.equal(await realpath(diagnosis.appPath), await realpath(installed));
   assert.equal(typeof diagnosis.accessibility, "boolean");
   assert.equal(typeof diagnosis.screenCapture, "boolean");
+  const menuIcon = await readFile(join(installed, "Contents/Resources/MenuLens.png"));
+  assert.deepEqual([menuIcon.readUInt32BE(16), menuIcon.readUInt32BE(20)], [72, 72]);
   console.log(
     "PASS: packaged app launcher, bundled Node, real Swift client and unified MCP; desktop input was disabled.",
   );
+  // Exercise the real App remote-mode client via the same loopback transport an
+  // SSH tunnel presents. Deployment can also terminate WSS at a TLS proxy.
+  native.kill();
+  await once(native, "exit");
+  native = undefined;
+  await client.close();
+  const macPort = await port();
+  const httpPort = await port();
+  const macToken = "mac-smoke-dedicated-token-0123456789";
+  const httpToken = "http-smoke-dedicated-token-0123456789";
+  const node = join(installed, "Contents/Helpers/node");
+  const bridge = join(installed, "Contents/Resources/bridge/dist/index.js");
+  remoteBridge = spawn(node, [bridge], {
+    env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("BRIDGELENS_"))),
+      BRIDGELENS_TRANSPORT: "http", BRIDGELENS_PORT: await port(),
+      BRIDGELENS_MAC_PORT: macPort, BRIDGELENS_HTTP_PORT: httpPort,
+      BRIDGELENS_MAC_REMOTE_TOKEN: macToken, BRIDGELENS_HTTP_TOKEN: httpToken },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  await new Promise((resolve, reject) => {
+    let log = "";
+    remoteBridge.stderr.on("data", chunk => {
+      log += chunk;
+      if (log.includes("MCP Streamable HTTP listening")) resolve();
+    });
+    remoteBridge.once("error", reject);
+    remoteBridge.once("exit", code => reject(new Error(`HTTP Bridge exited (${code}): ${log}`)));
+  });
+  client = new Client({ name: "remote-native-smoke", version: "1" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${httpPort}/mcp`), {
+    requestInit: { headers: { Authorization: `Bearer ${httpToken}` } },
+  }));
+  native = spawn(binary, ["--transport-smoke-test"], {
+    env: { ...process.env, ABL_MAC_SMOKE_REMOTE_URL: `ws://127.0.0.1:${macPort}/native`,
+      ABL_MAC_SMOKE_REMOTE_TOKEN: macToken },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  const remoteCaps = await waitForMac(native, client);
+  assert.equal(remoteCaps.native.transportSmokeTest, true);
+  assert.equal(remoteCaps.platform, "darwin");
+  assert.equal(parse(await client.callTool({ name: "desktop_stop", arguments: {} })).stopped, true);
+  console.log("PASS: installed Swift app in remote Bridge mode through authenticated HTTP MCP.");
+
 } finally {
   native?.kill("SIGTERM");
   await client?.close();
+  remoteBridge?.kill("SIGTERM");
   await rm(dir, { recursive: true, force: true });
 }

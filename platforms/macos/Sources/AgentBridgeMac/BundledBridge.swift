@@ -31,6 +31,7 @@ enum BundledBridge {
         guard isAvailable, let entry else { fail("Bundled Bridge is missing. Install the full AgentBridgeLens app.") }
         unsetenv("NODE_OPTIONS")
         unsetenv("NODE_PATH")
+        unsetenv("BRIDGELENS_MAC_REMOTE_TOKEN")
         setenv("BRIDGELENS_TRANSPORT", "stdio", 1)
         setenv("BRIDGELENS_HOST", "127.0.0.1", 1)
         setenv("BRIDGELENS_DESKTOP", "1", 1)

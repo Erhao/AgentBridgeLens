@@ -1,6 +1,6 @@
 {
   "name": "agentbridgelens",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "MCP bridge for real browser inspection and macOS, Windows and Linux desktop executors.",
   "type": "module",
   "bin": {

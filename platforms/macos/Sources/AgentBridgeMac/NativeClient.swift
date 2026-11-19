@@ -37,8 +37,9 @@ final class NativeClient: ObservableObject {
     @Published private(set) var connection: DesktopConnection = .waitingForClient
     var connected: Bool { connection == .connected }
     @Published private(set) var pendingCount = 0
-    @Published var accessibility = AXIsProcessTrusted()
-    @Published var screenCapture = CGPreflightScreenCaptureAccess()
+    @Published private(set) var permissions = DesktopPermissions()
+    var accessibility: Bool { permissions.accessibility }
+    var screenCapture: Bool { permissions.screenCapture }
     @Published var controlEnabled = false
     @Published var port: String
     @Published private(set) var activity: [DesktopActivity] = []
@@ -67,7 +68,8 @@ final class NativeClient: ObservableObject {
     }
 
     func refreshPermissions() {
-        accessibility = AXIsProcessTrusted(); screenCapture = CGPreflightScreenCaptureAccess()
+        let current = DesktopPermissions()
+        if current != permissions { permissions = current }
         if !accessibility && controlEnabled { stop() }
     }
 

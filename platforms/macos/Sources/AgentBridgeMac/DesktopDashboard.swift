@@ -1,5 +1,4 @@
 import AppKit
-import ApplicationServices
 import SwiftUI
 import BridgeCore
 
@@ -30,10 +29,14 @@ private enum DesktopPage: String, CaseIterable, Identifiable {
 struct DesktopDashboard: View {
     @ObservedObject var client: NativeClient
     @Environment(\.scenePhase) private var scenePhase
-    @State private var page: DesktopPage? = .overview
+    @State private var page: DesktopPage? = CommandLine.arguments.contains("--show-permissions")
+        ? .permissions : .overview
     @State private var portDraft = ""
     @State private var copyFeedback = ""
     @State private var copyError = ""
+    @State private var permissionsError: String?
+    @State private var restarting = false
+    @State private var lastPermissionCheck: Date?
 
     var body: some View {
         NavigationSplitView {
@@ -87,10 +90,10 @@ struct DesktopDashboard: View {
         .frame(minWidth: 700, minHeight: 470)
         .onAppear {
             portDraft = client.port
-            client.refreshPermissions()
+            checkPermissions()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { client.refreshPermissions() }
+            if phase == .active { checkPermissions() }
         }
         .task {
             while !Task.isCancelled {
@@ -209,24 +212,97 @@ struct DesktopDashboard: View {
 
     private var permissions: some View {
         VStack(alignment: .leading, spacing: 16) {
-            permissionCard(
-                "辅助功能", description: "读取当前窗口的控件，并在开启控制后执行点击和键入。",
-                symbol: "accessibility", granted: client.accessibility,
-                pane: "Privacy_Accessibility"
-            ) {
-                let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-                _ = AXIsProcessTrustedWithOptions(options)
+            Text("这里显示 macOS 为当前运行的 AgentBridgeLens 进程报告的权限。")
+                .foregroundStyle(.secondary)
+            if isTemporaryApp {
+                Label(
+                    "当前 App 正从磁盘映像或临时位置运行。请拖入「应用程序」，退出这份 App，再打开已安装的副本进行授权。",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .foregroundStyle(Color.orange)
             }
             permissionCard(
-                "屏幕与系统音频录制", description: "需要画面时抓取指定窗口的静态截图。纯控件读取无需开启。",
-                symbol: "rectangle.dashed", granted: client.screenCapture,
-                pane: "Privacy_ScreenCapture"
-            ) {
-                _ = CGRequestScreenCaptureAccess()
+                .accessibility, description: "读取当前窗口的控件，并在开启控制后执行点击和键入。",
+                symbol: "accessibility", granted: client.accessibility
+            )
+            permissionCard(
+                .screenCapture, description: "抓取指定窗口的静态截图。开启录屏权限后请重新打开 App。",
+                symbol: "rectangle.dashed", granted: client.screenCapture
+            )
+            HStack {
+                Button("重新检查", systemImage: "arrow.clockwise", action: checkPermissions)
+                if let lastPermissionCheck {
+                    Text(lastPermissionCheck, style: .time)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("上次检查时间")
+                }
             }
-            Button("刷新权限状态", systemImage: "arrow.clockwise") { client.refreshPermissions() }
-            Text("如果系统要求重新打开应用，退出后再打开 AgentBridgeLens。权限由 macOS 管理。")
-                .font(.callout).foregroundStyle(.secondary)
+
+            if !client.permissions.bothAvailable {
+                GroupBox("设置里已经开启？") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("先重新打开当前 App。如果仍显示不可用，请在 Finder 中定位这份 App，在对应权限列表中添加它。旧版本或同名副本的授权可能不会生效。")
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Button("重新打开 AgentBridgeLens", action: reopenForPermissionCheck)
+                                .buttonStyle(.borderedProminent)
+                                .disabled(restarting || isTemporaryApp)
+                            Button("在 Finder 中显示") {
+                                NSWorkspace.shared.activateFileViewerSelecting([appURL])
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                }
+            }
+            DisclosureGroup("当前运行的 App") {
+                LabeledContent("安装路径") { Text(appURL.path).textSelection(.enabled) }
+                    .padding(.vertical, 4)
+                LabeledContent("版本", value: BuildInfo.version)
+            }
+        }
+        .alert("权限操作未完成", isPresented: Binding(
+            get: { permissionsError != nil }, set: { if !$0 { permissionsError = nil } }
+        )) {
+            Button("好", role: .cancel) { permissionsError = nil }
+        } message: {
+            Text(permissionsError ?? "")
+        }
+    }
+
+    private var appURL: URL { Bundle.main.bundleURL.resolvingSymlinksInPath() }
+
+    private var isTemporaryApp: Bool {
+        if appURL.pathComponents.contains("AppTranslocation") { return true }
+        let volume = try? appURL.resourceValues(forKeys: [.volumeIsReadOnlyKey])
+        return volume?.volumeIsReadOnly == true
+    }
+
+    private func checkPermissions() {
+        client.refreshPermissions()
+        lastPermissionCheck = Date()
+    }
+
+    private func reopenForPermissionCheck() {
+        guard !restarting else { return }
+        restarting = true
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.arguments = ["--show-permissions"]
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { app, error in
+            let openedNewApp = app.map { $0.processIdentifier != currentPID } ?? false
+            Task { @MainActor in
+                guard error == nil, openedNewApp else {
+                    restarting = false
+                    permissionsError = "无法自动重新打开。请按 ⌘Q 退出，再从 Finder 打开此 App。"
+                    return
+                }
+                client.disconnect()
+                NSApp.terminate(nil)
+            }
         }
     }
 
@@ -258,8 +334,7 @@ struct DesktopDashboard: View {
     }
 
     private func permissionCard(
-        _ title: String, description: String, symbol: String, granted: Bool,
-        pane: String, request: @escaping () -> Void
+        _ permission: DesktopPermission, description: String, symbol: String, granted: Bool
     ) -> some View {
         GroupBox {
             HStack(alignment: .top, spacing: 12) {
@@ -268,20 +343,21 @@ struct DesktopDashboard: View {
                     .accessibilityHidden(true)
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(.headline)
+                    Text(permission.title).font(.headline)
                     Text(description).foregroundStyle(.secondary)
-                    Label(granted ? "已授权" : "未授权",
-                          systemImage: granted ? "checkmark.circle.fill" : "circle")
+                    Label(granted ? "当前 App 可用" : "当前 App 不可用",
+                          systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
                         .font(.caption).foregroundStyle(granted ? Color.green : Color.secondary)
                 }
                 Spacer()
                 Button(granted ? "查看设置" : "前往授权") {
-                    if !granted { request() }
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
-                        NSWorkspace.shared.open(url)
+                    if !granted { permission.requestIfNeeded() }
+                    if !permission.openSettings() {
+                        permissionsError = "请手动打开「系统设置 → 隐私与安全性 → \(permission.title)」。"
                     }
-                    client.refreshPermissions()
+                    checkPermissions()
                 }
+                .disabled(isTemporaryApp)
             }
             .padding(8)
         }

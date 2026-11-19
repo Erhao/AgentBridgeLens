@@ -1,4 +1,4 @@
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -91,6 +91,10 @@ try {
   const diagnosis = JSON.parse(execFileSync(binary, ["--diagnose"], { encoding: "utf8" }));
   assert.equal(diagnosis.version, version);
   assert.equal(diagnosis.bundledBridge, true);
+  assert.equal(diagnosis.bundleIdentifier, "tech.xinyu.agentbridgemac");
+  assert.equal(await realpath(diagnosis.appPath), await realpath(installed));
+  assert.equal(typeof diagnosis.accessibility, "boolean");
+  assert.equal(typeof diagnosis.screenCapture, "boolean");
   console.log(
     "PASS: packaged app launcher, bundled Node, real Swift client and unified MCP; desktop input was disabled.",
   );

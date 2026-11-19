@@ -38,7 +38,7 @@ final class DesktopEngine {
             return .object([
                 "connected": .bool(true), "version": .string(BuildInfo.version),
                 "controlEnabled": .bool(gate.isEnabled), "controlEpoch": .number(Double(gate.epoch)),
-                "permissions": .object(["accessibility": .bool(AXIsProcessTrusted()), "screenCapture": .bool(CGPreflightScreenCaptureAccess()), "postEvents": .bool(CGPreflightPostEventAccess())]),
+                "permissions": .object(DesktopPermissions().report),
                 "capabilities": .array(Self.capabilities.map(JSONValue.string)),
                 "limitations": .array([.string("AX coverage depends on the target app."), .string("Input shares the user's foreground desktop."), .string("No DOM, network, console, source tracing, or application-internal data access.")])
             ])
@@ -197,7 +197,9 @@ final class DesktopEngine {
     }
 
     private func capture(result: JSONValue, ticket: ControlGate.Ticket) async throws -> JSONValue {
-        guard CGPreflightScreenCaptureAccess() else { throw BridgeFailure("SCREEN_CAPTURE_DENIED", "Grant Screen Recording access locally. Observe without screenshot remains available.") }
+        guard DesktopPermission.screenCapture.isAvailable else {
+            throw BridgeFailure("SCREEN_CAPTURE_DENIED", "Enable Screen Recording for the running AgentBridgeLens app in System Settings, then reopen AgentBridgeLens. Observation without screenshots is still available.")
+        }
         let id = try result.requiredString("snapshotId")
         let snapshot = try await work { () throws -> Snapshot in
             try ticket.check()

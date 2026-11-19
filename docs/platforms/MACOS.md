@@ -13,6 +13,12 @@ AgentBridgeLens 支持 macOS 14.2 及以上版本。桌面应用内置 Node 运�
 
 在「连接客户端 → 高级设置」可以修改本机配对端口。开发者仍可自行启动 Bridge，并通过 `BRIDGELENS_DESKTOP=1`、`BRIDGELENS_MAC_PORT` 和 `BRIDGELENS_MAC_TOKEN_FILE` 配置。旧 `AGENTBRIDGEMAC_*` 环境变量和 `~/.agentbridgemac/token` 配对路径继续兼容。
 
+## 系统设置已开启，App 仍显示权限不可用
+
+1. 在「隐私与权限」点「重新打开 AgentBridgeLens」，或按 `⌘Q` 完全退出，再从「应用程序」重新打开。录屏权限需要重新启动进程才能生效。
+2. 如果仍显示不可用，在权限页点击「在 Finder 中显示」，确认当前运行的副本。把这份 `AgentBridgeLens.app` 添加到系统设置中对应的「辅助功能」或「屏幕与系统音频录制」列表，开启后再重开一次。若仍有旧版或同名条目，可先从相关列表移除旧条目，再添加当前副本。
+3. 开发预览版采用临时签名，升级后系统可能要求重新授权，即使名称和 Bundle Identifier 一样。授予安装后的 App，避免授权仍在 DMG 中的副本。
+
 ## 使用
 
 1. 查询 `desktop_get_capabilities`，取得当前连接的 sessionId。

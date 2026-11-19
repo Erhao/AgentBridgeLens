@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import ApplicationServices
 import BridgeCore
 
 @main
@@ -8,11 +7,12 @@ enum Launcher {
     @MainActor static func main() {
         if CommandLine.arguments.contains("--mcp") { BundledBridge.launch() }
         if CommandLine.arguments.contains("--diagnose") {
-            let status = JSONValue.object([
-                "version": .string(BuildInfo.version), "accessibility": .bool(AXIsProcessTrusted()),
-                "screenCapture": .bool(CGPreflightScreenCaptureAccess()), "postEvents": .bool(CGPreflightPostEventAccess()),
-                "bundledBridge": .bool(BundledBridge.isAvailable)
-            ])
+            var fields = DesktopPermissions().report
+            fields["version"] = .string(BuildInfo.version)
+            fields["appPath"] = .string(Bundle.main.bundleURL.path)
+            fields["bundleIdentifier"] = .string(Bundle.main.bundleIdentifier ?? "")
+            fields["bundledBridge"] = .bool(BundledBridge.isAvailable)
+            let status = JSONValue.object(fields)
             if let data = try? JSONEncoder().encode(status), let value = String(data: data, encoding: .utf8) { print(value) }
             return
         }

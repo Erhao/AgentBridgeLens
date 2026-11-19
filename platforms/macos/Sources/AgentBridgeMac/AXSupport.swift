@@ -58,7 +58,9 @@ enum AX {
         return .null
     }
     static func requireTrust() throws {
-        guard AXIsProcessTrusted() else { throw BridgeFailure("ACCESSIBILITY_DENIED", "Grant Accessibility access to AgentBridgeMac.app in System Settings, then refresh permissions.") }
+        guard DesktopPermission.accessibility.isAvailable else {
+            throw BridgeFailure("ACCESSIBILITY_DENIED", "Enable Accessibility for the running AgentBridgeLens app in System Settings. Refresh permissions or reopen AgentBridgeLens.")
+        }
     }
     static func check(_ error: AXError, operation: String) throws {
         guard error != .success else { return }

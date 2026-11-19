@@ -1,6 +1,6 @@
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import { spawn, execFileSync } from "node:child_process";
@@ -26,11 +26,14 @@ async function port() {
   return String(value);
 }
 try {
-  const bridge = resolve("packages/bridge/dist/index.js"),
-    binary = resolve(
+  const source = resolve(
       process.argv[2] ??
-        "artifacts/AgentBridgeMac.app/Contents/MacOS/AgentBridgeMac",
+        "artifacts/AgentBridgeLens.app/Contents/MacOS/AgentBridgeMac",
     );
+  const installed = join(dir, "Mac Applications", "AgentBridgeLens.app");
+  const sourceApp = resolve(dirname(source), "../..");
+  execFileSync("/usr/bin/ditto", [sourceApp, installed]);
+  const binary = join(installed, "Contents/MacOS/AgentBridgeMac");
   const env = {
     ...process.env,
     BRIDGELENS_DESKTOP: "1",
@@ -41,8 +44,8 @@ try {
   client = new Client({ name: "unified-native-smoke", version: "1" });
   await client.connect(
     new StdioClientTransport({
-      command: process.execPath,
-      args: [bridge],
+      command: binary,
+      args: ["--mcp"],
       env,
       stderr: "pipe",
     }),
@@ -85,13 +88,11 @@ try {
   const version = JSON.parse(
     await readFile("platforms/macos/version.json", "utf8"),
   ).version;
-  assert.equal(
-    JSON.parse(execFileSync(binary, ["--diagnose"], { encoding: "utf8" }))
-      .version,
-    version,
-  );
+  const diagnosis = JSON.parse(execFileSync(binary, ["--diagnose"], { encoding: "utf8" }));
+  assert.equal(diagnosis.version, version);
+  assert.equal(diagnosis.bundledBridge, true);
   console.log(
-    "PASS: real Swift native client, unified MCP, desktop tools, Mac aliases and browser tools coexist; desktop input was disabled.",
+    "PASS: packaged app launcher, bundled Node, real Swift client and unified MCP; desktop input was disabled.",
   );
 } finally {
   native?.kill("SIGTERM");

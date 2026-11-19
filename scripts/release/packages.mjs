@@ -16,8 +16,9 @@ export function packageVersion(baseVersion, ref, sha) {
       throw new Error("Release tag must exactly match the project version.");
     return baseVersion;
   }
+  if (ref === "refs/heads/desktop/macos-app") return `${baseVersion}-preview.${sha.slice(0, 12)}`;
   if (ref !== "refs/heads/main")
-    throw new Error("Only main and version tags may publish packages.");
+    throw new Error("Only main, the macOS app preview branch, and version tags may publish packages.");
   return `${baseVersion}-dev.${sha.slice(0, 12)}`;
 }
 
@@ -51,17 +52,19 @@ export async function publishPackages({
   const [owner, repo] = parts;
   const name = "agentbridgelens";
   const entries = (await readdir(artifactsDir))
-    .filter((n) => /\.(zip|tgz)$/.test(n))
+    .filter((n) => /\.(dmg|zip|tgz)$/.test(n))
     .sort();
   if (
     entries.length !== 2 ||
-    !entries.some((n) =>
-      /^agentbridgelens-macos-[0-9.]+-(arm64|x86_64)\.zip$/.test(n),
+    !["arm64", "x86_64"].some(arch =>
+      ["dmg", "zip"].some(ext =>
+        entries.includes(`agentbridgelens-macos-${nativeVersion}-${arch}.${ext}`),
+      ),
     ) ||
     !entries.includes(`agentbridgelens-bridge-${baseVersion}.tgz`)
   )
     throw new Error(
-      "Expected exactly one native ZIP and one versioned Bridge archive.",
+      "Expected one matching macOS installer and one versioned Bridge archive.",
     );
   const payloads = new Map();
   const files = [];

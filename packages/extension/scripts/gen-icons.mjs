@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = join(here, "..", "public", "icons");
+// A separate output directory supplies a full-size source for the native iconset.
+const appIconDirectory = process.argv[2];
+const outDir = appIconDirectory ?? join(here, "..", "public", "icons");
 
 // ---- PNG 编码（RGBA, 8-bit）----
 const CRC_TABLE = (() => {
@@ -122,7 +124,7 @@ function render(size) {
 }
 
 mkdirSync(outDir, { recursive: true });
-for (const size of [16, 48, 128, 256]) {
+for (const size of appIconDirectory ? [1024] : [16, 48, 128, 256]) {
   writeFileSync(join(outDir, `icon${size}.png`), render(size));
   console.log(`wrote icon${size}.png`);
 }

@@ -17,13 +17,14 @@ test("release tags match the project version and main builds get unique developm
     "0.1.2-dev.aaaaaaaaaaaa",
   );
   assert.throws(() => packageVersion("0.1.2", "refs/tags/desktop-v9.0.0", sha));
+  assert.equal(packageVersion("0.1.2", "refs/heads/desktop/macos-app", sha), "0.1.2-preview.aaaaaaaaaaaa");
   assert.throws(() => packageVersion("0.1.2", "refs/heads/feature", sha));
 });
 
 test("publishes four files, links the repo, verifies downloads and refuses changed immutable bytes", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "abm-registry-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  await writeFile(join(dir, "agentbridgelens-macos-0.2.0-arm64.zip"), "native");
+  await writeFile(join(dir, "agentbridgelens-macos-0.2.0-arm64.dmg"), "native");
   await writeFile(join(dir, "agentbridgelens-bridge-0.1.2.tgz"), "bridge");
   const stored = new Map();
   let links = 0;
@@ -99,14 +100,14 @@ test("publishes four files, links the repo, verifies downloads and refuses chang
   assert.equal(stored.size, 4);
   assert.equal(links, 1);
   await writeFile(
-    join(dir, "agentbridgelens-macos-0.2.0-arm64.zip"),
+    join(dir, "agentbridgelens-macos-0.2.0-arm64.dmg"),
     "changed",
   );
   await assert.rejects(publishPackages(config), /Immutable package conflict/);
   assert.equal(
     stored
       .get(
-        "/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-macos-0.2.0-arm64.zip",
+        "/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-macos-0.2.0-arm64.dmg",
       )
       .toString(),
     "native",

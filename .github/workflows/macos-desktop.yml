@@ -28,7 +28,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm --dir packages/bridge test
       - run: pnpm test:contracts
-      - name: Compile native app and run Swift core checks
+      - name: Build the self-contained app and run Swift core checks
         run: bash scripts/build/macos.sh
       - name: Real native client through unified MCP
         run: node scripts/test/macos-transport.mjs

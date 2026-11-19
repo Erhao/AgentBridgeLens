@@ -24,7 +24,7 @@ Mac 原生代码迁自 `xinyu/AgentBridgeMac` 的提交 `2d1ed26ffe2de184a9cb1fd
 - 保留 npm 包名 `agentbridgelens`、浏览器 Host/Port/Token、stdio/HTTP、目标标签页参数和全部浏览器工具名。
 - 默认不启用桌面。Linux/Windows 的 `BRIDGELENS_DESKTOP=1`、执行端环境变量与 `desktop_*` 参数继续兼容。
 - Mac 使用同一个 Bridge，运行 `--init-mac` 并设置 `BRIDGELENS_DESKTOP=1`。原有 19224 端口、`~/.agentbridgemac/token` 和 `AGENTBRIDGEMAC_*` 别名仍可使用。
-- Mac 原生 Bundle Identifier `tech.xinyu.agentbridgemac` 与 `AgentBridgeMac.app` 名称保留。源码目录改变不要求用户重新配置应用身份；开发签名二进制更新仍可能被系统要求重新授权。
+- Mac 原生 Bundle Identifier `tech.xinyu.agentbridgemac` 保留。Mac 0.3.0 起应用文件名为 `AgentBridgeLens.app`，迁移客户端时请复制新路径生成的 MCP 配置。签名变更后 macOS 可能要求重新授权。
 - 原独立 Mac MCP 工具由兼容注册函数转发到同一连接，旧 `mac_*` 客户端可继续使用。不要同时启动占用同一端口的旧 Bridge。
 
 ## 发布包与源码目录

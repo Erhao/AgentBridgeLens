@@ -1,7 +1,7 @@
 name: Unified desktop build and registry
 on:
   push:
-    branches: [main]
+    branches: [main, "desktop/macos-app"]
     tags: ["desktop-v*"]
   workflow_dispatch:
 jobs:
@@ -17,14 +17,14 @@ jobs:
           npx --yes pnpm@10.33.3 --dir packages/bridge test
           npx --yes pnpm@10.33.3 test:contracts
           node --test scripts/release/packages.test.mjs
-      - name: Build Mac companion
-        run: bash scripts/build/macos.sh package
-      - name: Verify actual Swift client through unified MCP
-        run: node scripts/test/macos-transport.mjs
+      - name: Build the self-contained macOS installer
+        run: npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/macos.sh package'
+      - name: Mount the DMG and verify the installed app through MCP
+        run: bash scripts/test/macos-dmg.sh
       - name: Package standalone Bridge
         run: |
           export PATH="$(dirname "$(command -v node)"):$PATH"
-          npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/bundle-bridge.sh'
+          npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/bundle-bridge.sh artifacts/AgentBridgeLens.app/Contents/Resources'
       - name: Publish immutable registry files and verify downloads
         env:
           GITEA_SERVER_URL: ${{ gitea.server_url }}
@@ -37,7 +37,7 @@ jobs:
         with:
           name: unified-desktop-${{ gitea.sha }}
           path: |
-            artifacts/*.zip
+            artifacts/*.dmg
             artifacts/*.tgz
             artifacts/SHA256SUMS
             artifacts/BUILD-MANIFEST.json

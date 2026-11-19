@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>AgentBridgeMac</string>
-  <key>CFBundleDisplayName</key><string>AgentBridgeMac</string>
+  <key>CFBundleName</key><string>AgentBridgeLens</string>
+  <key>CFBundleDisplayName</key><string>AgentBridgeLens</string>
   <key>CFBundleIdentifier</key><string>tech.xinyu.agentbridgemac</string>
-  <key>CFBundleVersion</key><string>4</string>
-  <key>CFBundleShortVersionString</key><string>0.2.0</string>
+  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>0.3.0</string>
   <key>CFBundleExecutable</key><string>AgentBridgeMac</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>14.2</string>
-  <key>LSUIElement</key><true/>
+  <key>CFBundleIconFile</key><string>AgentBridgeLens.icns</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSScreenCaptureUsageDescription</key><string>在您请求时截取目标窗口，让 AI 查看界面并验证操作。</string>
 </dict></plist>

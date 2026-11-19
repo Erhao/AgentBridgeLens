@@ -2,7 +2,6 @@ import {
   lstatSync,
   readdirSync,
   readlinkSync,
-  symlinkSync,
   unlinkSync,
 } from "node:fs";
 import { resolve, relative, dirname, join, sep } from "node:path";
@@ -13,19 +12,14 @@ function walk(dir) {
     const path = join(dir, name),
       stat = lstatSync(path);
     if (stat.isSymbolicLink()) {
+      // This legacy deploy self-link isn't needed at runtime and points outside the package.
+      if (relative(root, path).split(sep).join("/") === "node_modules/.pnpm/node_modules/agentbridgelens") {
+        unlinkSync(path);
+        continue;
+      }
       const target = resolve(dirname(path), readlinkSync(path));
       if (target !== root && !target.startsWith(root + sep)) {
-        // pnpm legacy deploy leaves its self-reference pointing at the source workspace.
-        if (
-          relative(root, path).split(sep).join("/") ===
-          "node_modules/.pnpm/node_modules/agentbridgelens"
-        ) {
-          unlinkSync(path);
-          symlinkSync(relative(dirname(path), root), path);
-        } else
-          throw new Error(
-            `Non-portable dependency link: ${relative(root, path)}`,
-          );
+        throw new Error(`Non-portable dependency link: ${relative(root, path)}`);
       }
     } else if (stat.isDirectory()) walk(path);
   }

@@ -19,6 +19,7 @@ enum BridgeCoreChecks {
         try staleAndMovedSnapshotRejected()
         try retinaAndNegativeDisplayOriginMapping()
         try wireRoundTripAndMalformedArguments()
+        try mcpConfigurationResolvesPathsAndValidatesPorts()
         if let path = CommandLine.arguments.dropFirst().first {
             let fixture = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
             let decode = { (value: JSONValue) throws -> WireMessage in
@@ -32,7 +33,7 @@ enum BridgeCoreChecks {
             try expect(cancel.type == "cancel" && cancel.id == request.id)
             print("PASS: shared native wire fixture decoded by Swift.")
         }
-        print("PASS: 5 Swift core checks (stop, cancellation, snapshot lifetime, coordinates, protocol).")
+        print("PASS: 6 Swift core checks (stop, cancellation, snapshot lifetime, coordinates, protocol, app configuration).")
     }
     static func stopInvalidatesQueuedInputAndRequiresLocalEnable() throws {
         let gate = ControlGate()
@@ -77,4 +78,21 @@ enum BridgeCoreChecks {
         try expectThrows { _ = try value.requiredString("missing") }
         try expectThrows { _ = try JSONValue.object(["depth": .number(1.5)]).int("depth", default: 8, range: 1...15) }
     }
+    static func mcpConfigurationResolvesPathsAndValidatesPorts() throws {
+        let executable = "/Applications/AgentBridgeLens 副本.app/Contents/MacOS/AgentBridgeMac"
+        let tokenFile = "/Users/Example name/.agentbridgemac/token"
+        let config = try MCPConfiguration(executablePath: executable, port: "019224", tokenFile: tokenFile)
+        let json = try JSONDecoder().decode(JSONValue.self, from: Data(config.json().utf8))
+        let server = json["mcpServers"]["agentbridgelens"]
+        try expect(server["command"].string == executable)
+        try expect(server["args"] == .array([.string("--mcp")]))
+        try expect(server["env"]["BRIDGELENS_MAC_PORT"].string == "19224")
+        try expect(server["env"]["BRIDGELENS_MAC_TOKEN_FILE"].string == tokenFile)
+        try expect(MCPConfiguration.validPort("65536") == nil)
+        try expect(MCPConfiguration.validPort("+19224") == nil)
+        try expectThrows {
+            _ = try MCPConfiguration(executablePath: "relative", port: "19224", tokenFile: tokenFile)
+        }
+    }
+
 }

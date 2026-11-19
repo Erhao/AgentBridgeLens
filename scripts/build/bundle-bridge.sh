@@ -2,10 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p artifacts
-bundle_stage="$(mktemp -d "${TMPDIR:-/tmp}/agentbridgelens-bundle.XXXXXX")"
-trap 'rm -rf "$bundle_stage"' EXIT
-pnpm --filter agentbridgelens deploy --prod --legacy "$bundle_stage/bridge"
-node scripts/build/prepare-bundle.mjs "$bundle_stage/bridge"
-node "$bundle_stage/bridge/dist/index.js" --version
+if [[ $# -gt 0 ]]; then
+  bridge_parent="$1"
+  test -f "$bridge_parent/bridge/dist/index.js"
+else
+  bridge_parent="$(mktemp -d "${TMPDIR:-/tmp}/agentbridgelens-bundle.XXXXXX")"
+  trap 'rm -rf "$bridge_parent"' EXIT
+  bash scripts/build/stage-bridge.sh "$bridge_parent/bridge"
+fi
 bridge_version="$(node -p 'JSON.parse(require("fs").readFileSync("packages/bridge/package.json","utf8")).version')"
-tar -czf "artifacts/agentbridgelens-bridge-${bridge_version}.tgz" -C "$bundle_stage" bridge
+tar -czf "artifacts/agentbridgelens-bridge-${bridge_version}.tgz" -C "$bridge_parent" bridge

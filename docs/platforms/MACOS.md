@@ -1,18 +1,17 @@
 # macOS 桌面执行端
 
-Mac 菜单栏应用位于 `platforms/macos`，通过现有 AgentBridgeLens MCP Bridge 暴露 `desktop_*` 工具。macOS 14.2+，本机运行 Node.js Bridge；Swift 构建只在 macOS 进行。
+AgentBridgeLens 支持 macOS 14.2 及以上版本。桌面应用内置 Node 运行时和统一 MCP Bridge，配置和授权都可在主窗口完成。
 
-## 连接
+## 安装与连接
 
-```bash
-pnpm install --frozen-lockfile
-pnpm --dir packages/bridge build
-node packages/bridge/dist/index.js --init-mac
-```
+1. 从[统一制品库](https://gitea.xinyu1997.tech/xinyu/AgentBridgeLens/packages)下载与你的 Mac 芯片匹配的 DMG。打开磁盘映像，将 AgentBridgeLens 拖入「应用程序」后再启动。
+2. 在「连接客户端」复制 MCP 配置，把其中的 `agentbridgelens` 条目加到支持本机 stdio MCP 的 AI 客户端，然后重载客户端。客户端负责启动 App 内的 Bridge，无需另装 Node 或运行初始化命令。
+3. 回到「概览」，确认连接后可查询桌面能力。在「隐私与权限」授予辅助功能；需要截图时，再单独开启屏幕录制权限。
+4. 桌面控制每次连接默认关闭。需要点击或键入时，在「概览」手动开启。可以从工具栏、菜单栏或应用的「桌面」菜单停止。
 
-在 MCP 配置中设置 `BRIDGELENS_DESKTOP=1`。打开已安装的 `AgentBridgeMac.app`，授予辅助功能，截图时再授予屏幕录制权限。Mac 只连接本机 `ws://127.0.0.1:19224/native`，使用 owner-only 配对文件和 Authorization 请求头；浏览器 Origin 被拒绝。
+配置使用 App 当前的绝对路径。移动或改名后，重新复制配置。旧安装如果显示两份应用，请退出旧版并移除旧应用副本。保留应用数据目录中的原有配对文件。使用旧版独立 Bridge 的客户端应先停用旧配置，以免占用同一端口。
 
-`BRIDGELENS_MAC_PORT` / `BRIDGELENS_MAC_TOKEN_FILE` 支持自定义配置；兼容 `AGENTBRIDGEMAC_PORT` / `AGENTBRIDGEMAC_TOKEN_FILE`。Mac 菜单栏中须使用对应端口和配对文件。默认文件仍为 `~/.agentbridgemac/token`。
+在「连接客户端 → 高级设置」可以修改本机配对端口。开发者仍可自行启动 Bridge，并通过 `BRIDGELENS_DESKTOP=1`、`BRIDGELENS_MAC_PORT` 和 `BRIDGELENS_MAC_TOKEN_FILE` 配置。旧 `AGENTBRIDGEMAC_*` 环境变量和 `~/.agentbridgemac/token` 配对路径继续兼容。
 
 ## 使用
 
@@ -29,6 +28,8 @@ node packages/bridge/dist/index.js --init-mac
 
 ## 验证
 
-CI 运行 `bash scripts/build/macos.sh`，编译 release 程序并运行 Swift 核心检查；随后 `node scripts/test/macos-transport.mjs` 启动真实 Swift 二进制的禁止输入测试模式，验证浏览器、统一桌面和旧 Mac 工具共存。
+CI 编译原生应用并执行 Swift 核心检查。通信检查将应用复制到工作区以外、含空格的目录，通过其 `--mcp` 启动内置 Bridge，验证原生握手、工具注册和停止命令。测试模式不派发桌面输入。
 
-这项通信测试不证明真实桌面操作通过。授权、应用覆盖、多屏、焦点、遮挡、撤销和停止需要在用户已解锁的 Mac 桌面上验收。应用身份保留；默认 ad-hoc 签名尚未公证。
+辅助功能、录屏提示、焦点和实际操作在已解锁的目标 Mac 上验收。应用的 Bundle Identifier 沿用旧版。开发预览使用临时签名，公证发布需设置 Developer ID 和 `MAC_NOTARY_PROFILE`。
+
+安装与授权流程参考 [Alfred 安装指南](https://www.alfredapp.com/help/getting-started/install/)、[Raycast 屏幕权限说明](https://manual.raycast.com/ai/screen-awareness)和 [Apple macOS 设计指南](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos)。磁盘映像与公证遵循 [Apple 分发指南](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)。

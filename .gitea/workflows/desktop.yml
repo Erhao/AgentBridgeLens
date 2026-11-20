@@ -8,7 +8,7 @@ jobs:
   macos:
     runs-on: macos-arm64
     concurrency:
-      group: ${{ startsWith(gitea.ref, 'refs/tags/macos-v') && 'macos-signed-update' || gitea.ref }}
+      group: ${{ startsWith(gitea.ref, 'refs/tags/macos-v') && 'macos-personal-installer' || gitea.ref }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -23,29 +23,21 @@ jobs:
       - name: Build the self-contained macOS installer
         if: ${{ !startsWith(gitea.ref, 'refs/tags/macos-v') }}
         run: npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/macos.sh package'
-      - name: Build a signed macOS release
+      - name: Build the macOS installer with in-app updates
         if: ${{ startsWith(gitea.ref, 'refs/tags/macos-v') }}
         env:
           MAC_RELEASE_REF: ${{ gitea.ref }}
-          MAC_SIGN_IDENTITY: ${{ vars.MAC_SIGN_IDENTITY }}
-          MAC_NOTARY_PROFILE: ${{ vars.MAC_NOTARY_PROFILE }}
-          MAC_UPDATE_FEED_URL: https://github.com/Erhao/AgentBridgeLens/releases/download/macos-update-feed/appcast.xml
-          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           version="$(node -p 'require("./platforms/macos/version.json").version')"
           test "$MAC_RELEASE_REF" = "refs/tags/macos-v$version"
-          : "${MAC_SIGN_IDENTITY:?}" "${MAC_NOTARY_PROFILE:?}" "${SPARKLE_PUBLIC_ED_KEY:?}"
+          set -a
+          source platforms/macos/update-channel.env
+          set +a
           npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/macos.sh package'
       - name: Mount the DMG and verify the installed app through MCP
         env:
           ABL_REQUIRE_SIGNED_UPDATE: ${{ startsWith(gitea.ref, 'refs/tags/macos-v') && '1' || '0' }}
         run: bash scripts/test/macos-dmg.sh
-      - name: Create and verify the signed update archive and feed
-        if: ${{ startsWith(gitea.ref, 'refs/tags/macos-v') }}
-        env:
-          MAC_NOTARY_PROFILE: ${{ vars.MAC_NOTARY_PROFILE }}
-          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-        run: bash scripts/release/macos-appcast.sh
       - name: Package standalone Bridge
         run: |
           export PATH="$(dirname "$(command -v node)"):$PATH"
@@ -58,11 +50,6 @@ jobs:
           GITEA_SHA: ${{ gitea.sha }}
           GITEA_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: node scripts/release/packages.mjs
-      - name: Publish the in-app update feed
-        if: ${{ startsWith(gitea.ref, 'refs/tags/macos-v') }}
-        env:
-          GH_TOKEN: ${{ secrets.MAC_UPDATE_GITHUB_TOKEN }}
-        run: bash scripts/release/publish-macos-feed.sh
       - uses: actions/upload-artifact@v3
         if: always()
         with:
@@ -72,5 +59,3 @@ jobs:
             artifacts/*.tgz
             artifacts/SHA256SUMS
             artifacts/BUILD-MANIFEST.json
-            artifacts/update/*.zip
-            artifacts/update/appcast.xml

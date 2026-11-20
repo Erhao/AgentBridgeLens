@@ -1,0 +1,51 @@
+name: macOS personal update channel
+
+on:
+  push:
+    tags: ["macos-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-personal-update
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify release version and build the Mac app
+        run: |
+          test "$(uname -m)" = arm64
+          version="$(node -p 'require("./platforms/macos/version.json").version')"
+          test "$GITHUB_REF" = "refs/tags/macos-v$version"
+          pnpm --dir packages/bridge build
+          set -a
+          source platforms/macos/update-channel.env
+          set +a
+          bash scripts/build/macos.sh
+      - name: Test the installed app with the update channel configured
+        env:
+          ABL_REQUIRE_SIGNED_UPDATE: "1"
+        run: node scripts/test/macos-transport.mjs
+      - name: Sign and verify the appcast and update archive
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: bash scripts/release/macos-appcast.sh
+      - name: Publish the verified appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release/publish-macos-feed.sh

@@ -2,7 +2,6 @@
 # Build the signed archive and appcast from the same app as the first-install DMG.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-: "${MAC_NOTARY_PROFILE:?Notary keychain profile required}"
 : "${SPARKLE_ED_PRIVATE_KEY:?Sparkle private key required}"
 app="$PWD/artifacts/AgentBridgeLens.app"
 plist="$app/Contents/Info.plist"
@@ -23,10 +22,12 @@ tar -xf "$tools_archive" -C "$scratch" ./bin/generate_appcast ./bin/sign_update
 update_dir="$PWD/artifacts/update"
 mkdir "$update_dir"
 archive="$update_dir/agentbridgelens-macos-${version}-$(uname -m).zip"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/for-notary.zip"
-xcrun notarytool submit "$scratch/for-notary.zip" --keychain-profile "$MAC_NOTARY_PROFILE" --wait
-xcrun stapler staple "$app"
-xcrun stapler validate "$app"
+if [[ -n "${MAC_NOTARY_PROFILE:-}" ]]; then
+  ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/for-notary.zip"
+  xcrun notarytool submit "$scratch/for-notary.zip" --keychain-profile "$MAC_NOTARY_PROFILE" --wait
+  xcrun stapler staple "$app"
+  xcrun stapler validate "$app"
+fi
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 
 # The private key is sent only on standard input. The appcast tool signs the

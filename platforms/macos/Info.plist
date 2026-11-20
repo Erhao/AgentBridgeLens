@@ -4,8 +4,8 @@
   <key>CFBundleName</key><string>AgentBridgeLens</string>
   <key>CFBundleDisplayName</key><string>AgentBridgeLens</string>
   <key>CFBundleIdentifier</key><string>tech.xinyu.agentbridgemac</string>
-  <key>CFBundleVersion</key><string>9</string>
-  <key>CFBundleShortVersionString</key><string>0.5.0</string>
+  <key>CFBundleVersion</key><string>10</string>
+  <key>CFBundleShortVersionString</key><string>0.5.1</string>
   <key>CFBundleExecutable</key><string>AgentBridgeMac</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>14.2</string>

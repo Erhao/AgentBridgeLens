@@ -69,7 +69,7 @@ struct UpdateSettings: View {
                     .foregroundStyle(.secondary)
                 CheckForUpdatesButton(updater: updater)
             } else {
-                Text("此开发版未配置签名更新通道。安装正式签名版后，即可在应用内更新。")
+                Text("此预览版没有连接更新通道。安装支持应用内更新的版本后，即可在这里检查更新。")
                     .foregroundStyle(.secondary)
             }
         }

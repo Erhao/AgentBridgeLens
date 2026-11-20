@@ -26,16 +26,13 @@ main 构建版本为 `<Bridge版本>-dev.<提交短哈希>`；显式 `desktop-v<
 旧 `agentbridgemac/0.1.2` 制品保留供历史使用。新的安装包从统一项目的软件包页面取得，不以本地 ZIP 或临时 Actions 附件作为用户交付链接。
 
 
-## 签名更新通道
+## Mac 个人版更新通道
 
-Mac 版本和 Bridge 版本独立。正式 Mac 版本打 Gitea 标签 `macos-v<原生版本>`（与 `platforms/macos/version.json` 一致），并提高 Info.plist 里的 `CFBundleVersion`。正式签名 DMG 及对应 Bridge 包会发布到 Gitea 的 `macos-<原生版本>`。App 内更新通过 HTTPS 下载 GitHub 专用预发布条目 `macos-update-feed` 中的已签名 ZIP 和 appcast。独立的更新条目与 Chrome 扩展的 Latest release 分开。
+Mac 版本和 Bridge 版本独立。更新 Mac 版本时同步 `platforms/macos/version.json` 和 Info.plist，并提高 Info.plist 中的 `CFBundleVersion`。把同一个 `macos-v<原生版本>` 标签推送到 GitHub 和 Gitea。
 
-首次启用由项目维护者配置以下资源：
+- GitHub Actions 构建 Apple Silicon App，用 `SPARKLE_ED_PRIVATE_KEY` 签名 ZIP 和目录文件，核对提交中的公钥、文件长度和版本，再发布到 `macos-update-feed` 专用预发布条目。这个条目不会成为 Chrome 扩展的 Latest release。更新文件公开下载，用户侧无需令牌。
+- Gitea Actions 用同一个公开更新地址和公钥生成首次安装 DMG，并保存在 `macos-<原生版本>` 制品中。
+- 两边的 App 都使用本地签名。Sparkle 更新签名独立于 Apple Developer ID。普通分支预览包不配置更新通道。个人版自动检查默认打开，可在设置里关闭，安装需要用户手动确认。
+- `platforms/macos/update-channel.env` 只包含公开配置。更新私钥保存在 GitHub 仓库 Secret 中，不发给客户端。更换更新密钥会使已有个人版无法沿用原更新通道，应保护密钥并保持公钥不变。从不同签名身份迁移时，保留原安装位置和 App 设置，macOS 仍可能要求重新授权。
 
-- Mac 签名 runner 的钥匙串须同时有 **Developer ID Application** 证书和对应私钥，以及 `notarytool store-credentials` 保存的 Apple 公证配置。保留同一个 Apple Developer 团队及 Bundle Identifier `tech.xinyu.agentbridgemac`。
-- Gitea Actions Variables 设置 `MAC_SIGN_IDENTITY`（完整证书名称）、`MAC_NOTARY_PROFILE`（runner 钥匙串中的配置名称）、`SPARKLE_PUBLIC_ED_KEY`（Sparkle `bin/generate_keys` 打印的公开键）。用 Sparkle 的 `generate_keys -x <file>` 导出私钥，仅存入 Secrets 中的 `SPARKLE_ED_PRIVATE_KEY`。保留公钥与私钥的安全备份。
-- 在 GitHub 的 `Erhao/AgentBridgeLens` 创建已发布的预发布条目 `macos-update-feed`，设置为非 Latest。在 runner 装好 `gh`，在 Gitea Secrets 添加仅用于此 repo Release 发布的 `MAC_UPDATE_GITHUB_TOKEN`。无需给安装用户配置 Gitea 或 GitHub Token。
-
-签名工作流编译、验证并公证 DMG 和更新包。它核对 appcast 与安装包中的版本和公开键，先上传版本化 ZIP，后切换 appcast。已经发布的 ZIP 保留，更新构建号必须单调递增。同一个签名构建还要经过安装后从工作区以外启动 App 与 Bridge 的测试。签名通道的验收需在测试 Mac 安装两个连续的正式版本，通过 App 内菜单完成 V1 → V2 并复核辅助功能和录屏授权。
-
-开发预览版不会添加 `SUFeedURL` 或 `SUPublicEDKey`，所以更新菜单不会尝试安装未签名的制品。正式的自动检查默认打开、允许用户关闭。发现更新后须由用户确认安装。
+发布器先验证 ZIP，再更新 appcast。历史 ZIP 保留，版本构建号必须递增。首次使用此通道需用支持更新的 DMG 替换旧 App 一次。通过 App 菜单「检查更新…」即可手动检查并安装后续更新。

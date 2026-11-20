@@ -46,10 +46,6 @@ if [[ -n "$profile" && "$identity" == "-" ]]; then
 fi
 
 if [[ -n "$feed" || -n "$public_key" ]]; then
-  if [[ "$identity" != "Developer ID Application: "* || -z "$profile" || "$mode" != package ]]; then
-    echo 'Updates require Developer ID Application signing and notarized packaging.' >&2
-    exit 1
-  fi
   node --input-type=module - "$feed" "$public_key" <<'JS'
 const [, , address, key] = process.argv;
 const feed = new URL(address);
@@ -85,9 +81,6 @@ else
   codesign "${sign_options[@]}" --entitlements platforms/macos/NodeEntitlements.plist "$helpers/node"
 fi
 codesign "${sign_options[@]}" "$app"
-if [[ -n "$feed" ]]; then
-  codesign --verify -R='anchor apple generic and identifier "tech.xinyu.agentbridgemac" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists' "$app"
-fi
 codesign --verify --deep --strict "$app"
 
 if [[ "$mode" == package ]]; then

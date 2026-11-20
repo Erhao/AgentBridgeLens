@@ -9,11 +9,17 @@ archives=("$dir"/*.zip)
 [[ ${#archives[@]} -eq 1 && -f "${archives[0]}" && -f "$dir/appcast.xml" ]]
 archive="${archives[0]}"
 
-# Reuse the existing dedicated release. Only the feed file is replaced.
-assets="$(gh release view "$tag" --repo "$repo" --json assets,isDraft,isPrerelease)"
+# Create the dedicated public feed once. It must not become the extension's
+# latest release. Archive names are immutable; the appcast is replaced last.
+if ! assets="$(gh release view "$tag" --repo "$repo" --json assets,isDraft,isPrerelease)"; then
+  gh release create "$tag" --repo "$repo" --target "${GITHUB_SHA:?Expected a GitHub Actions commit}" \
+    --prerelease --latest=false --title "AgentBridgeLens Mac · 更新通道" \
+    --notes "Mac 个人版应用内更新文件。首次安装包请使用 Gitea 制品库。"
+  assets="$(gh release view "$tag" --repo "$repo" --json assets,isDraft,isPrerelease)"
+fi
 node --input-type=module - "$assets" <<'JS'
 const release = JSON.parse(process.argv[2]);
-if (release.isDraft || !release.isPrerelease) throw new Error("The feed release must be an existing published prerelease.");
+if (release.isDraft || !release.isPrerelease) throw new Error("The feed release must be a published prerelease.");
 JS
 has_asset() {
   node -e 'process.exit(JSON.parse(process.argv[1]).assets.some(a => a.name === process.argv[2]) ? 0 : 1)' "$assets" "$1"
@@ -52,6 +58,9 @@ fi
 
 if [[ "$archive_published" == false ]]; then
   gh release upload "$tag" "$archive" --repo "$repo"
+  curl -fsSL --retry 3 --max-time 180 \
+    "https://github.com/$repo/releases/download/$tag/$archive_name" -o "$scratch/$archive_name"
+  cmp "$archive" "$scratch/$archive_name"
 fi
 gh release upload "$tag" "$dir/appcast.xml" --clobber --repo "$repo"
 mkdir "$scratch/verify"

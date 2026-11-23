@@ -9,6 +9,8 @@ export default {
     "@semantic-release/release-notes-generator",
     "./scripts/release/extension.mjs",
     ["@semantic-release/github", {
+      githubUrl: "https://github.com",
+      githubApiUrl: "https://api.github.com",
       assets: [
         { path: "release/agentbridgelens-extension-*.zip", label: "Chrome extension" },
         { path: "release/agentbridgelens-updater.zip", label: "Fixed-directory updater (Windows / macOS / Linux)" },

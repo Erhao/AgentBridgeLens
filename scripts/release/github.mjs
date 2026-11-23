@@ -44,7 +44,10 @@ export async function publishGitHub({ repository, token, sha, ref, artifactsDir,
       signal: AbortSignal.timeout(300_000),
     });
     if (allow404 && response.status === 404) return null;
-    if (!response.ok) throw new Error(`GitHub ${method} failed (HTTP ${response.status}).`);
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(`GitHub ${method} ${new URL(url).pathname} failed (HTTP ${response.status}): ${String(details.message ?? "Request rejected").slice(0, 300)}`);
+    }
     return binary ? Buffer.from(await response.arrayBuffer()) : response.json();
   }
   const tagRef = await request(`${base}/git/ref/tags/${encodeURIComponent(tag)}`, { allow404: true });

@@ -7,12 +7,26 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { analyzeCommits } from "@semantic-release/commit-analyzer";
 import { prepare, validateVersion } from "./extension.mjs";
 import { releaseRules } from "./extension-rules.mjs";
+import releaseConfiguration from "../../release.config.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const logger = { log() {} };
+
+test("Gitea API aliases cannot redirect the GitHub release plugin to Gitea", async () => {
+  const require = createRequire(import.meta.url);
+  const { default: resolveConfig } = await import(join(dirname(require.resolve("@semantic-release/github")), "lib/resolve-config.js"));
+  const [, options] = releaseConfiguration.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "@semantic-release/github");
+  const config = resolveConfig(options, { env: {
+    GITHUB_URL: "http://gitea.invalid", GITHUB_API_URL: "http://gitea.invalid/api/v1", GH_TOKEN: "test-secret",
+  } });
+  assert.equal(config.githubUrl, "https://github.com");
+  assert.equal(config.githubApiUrl, "https://api.github.com");
+});
 
 test("release versions obey Chrome numeric limits and SemVer", () => {
   for (const version of ["1.0.0", "0.1.0", "65535.65535.65535"]) {

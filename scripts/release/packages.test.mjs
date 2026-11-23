@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageVersion, publishPackages } from "./packages.mjs";
 import { packageUpdater } from "./updater-package.mjs";
+import { restorePackages } from "./restore-packages.mjs";
 
 const sha = "a".repeat(40);
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -116,6 +117,12 @@ test("publishes native, Bridge and updater files, verifies downloads and refuses
   assert.equal(stored.get("/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-updater.zip.sha256").toString(),
     `${updaterHash}  agentbridgelens-updater.zip\n`);
   assert.match(sums, new RegExp(`${updaterHash}  agentbridgelens-updater.zip\\n`));
+  const restored = join(dir, "restored");
+  const restoredManifest = await restorePackages({ ...config, artifactsDir: restored });
+  assert.equal(restoredManifest.source.commit, sha);
+  for (const file of result.files)
+    assert.deepEqual(await readFile(join(restored, file.name)), await readFile(join(dir, file.name)));
+  await assert.rejects(restorePackages({ ...config, artifactsDir: join(dir, "wrong-commit"), sha: "b".repeat(40) }), /does not match/);
   await publishPackages(config);
   assert.equal(stored.size, 8);
   assert.equal(links, 1);
@@ -132,6 +139,8 @@ test("publishes native, Bridge and updater files, verifies downloads and refuses
       .toString(),
     "native",
   );
+  stored.set("/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-updater.zip", Buffer.from("corrupt retained updater"));
+  await assert.rejects(restorePackages({ ...config, artifactsDir: join(dir, "corrupt") }), /Retained build checksum mismatch/);
 });
 
 test("rejects missing updaters, mixed platform versions and corrupt checksums before any upload", async (t) => {

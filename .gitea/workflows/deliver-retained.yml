@@ -1,0 +1,35 @@
+name: Deliver a verified Gitea build to GitHub
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing Gitea package version
+        required: true
+        type: string
+      commit:
+        description: Exact source commit from BUILD-MANIFEST.json
+        required: true
+        type: string
+env:
+  HTTPS_PROXY: http://10.0.0.246:7897
+  HTTP_PROXY: http://10.0.0.246:7897
+  NO_PROXY: localhost,127.0.0.1,10.0.0.246
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: https://gitea.com/actions/checkout@v4
+      - uses: https://gitea.com/actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Restore, verify and upload the original Gitea build without recompiling
+        env:
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_REPOSITORY: ${{ gitea.repository }}
+          GITEA_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          SOURCE_VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.commit }}
+          NODE_USE_ENV_PROXY: '1'
+        run: node scripts/release/restore-packages.mjs artifacts

@@ -21,6 +21,8 @@ Windows 交叉编译和 PE 校验不等于 Windows 真机 GUI 验收，发布说
 
 GitHub 上传先建立草稿，全部附件回下载 SHA256 校验通过后才公开；重试只接受相同字节，禁止覆盖已发布的不同制品。Gitea Secret `GH_RELEASE_TOKEN` 提供 GitHub 目标仓库的 Contents 写权限；不依赖 GitHub Actions token 或执行 GitHub workflow。
 
+若构建和 Gitea 入库成功、GitHub 上传因权限或网络失败，修复凭据后运行 `deliver-retained.yml`，填写已有制品库版本和清单中的完整提交号。该流程下载原始制品、逐个核对 SHA256，再上传 GitHub；不重新编译或覆盖已有 Gitea 制品。
+
 ## Gitea 制品库
 
 `.gitea/workflows/desktop.yml` 使用 Linux 与现有 macos-arm64 运行器，构建各平台制品、测试统一 MCP，再发布到 `xinyu` 的 Generic 包 `agentbridgelens` 并关联统一仓库。

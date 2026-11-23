@@ -3,6 +3,10 @@ on:
   push:
     tags: ['bridge-v*']
   workflow_dispatch:
+env:
+  HTTPS_PROXY: http://10.0.0.246:7897
+  HTTP_PROXY: http://10.0.0.246:7897
+  NO_PROXY: localhost,127.0.0.1,10.0.0.246
 concurrency:
   group: bridge-release-${{ gitea.ref }}
   cancel-in-progress: false
@@ -11,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: https://gitea.com/actions/checkout@v4
+      - uses: https://gitea.com/actions/setup-node@v4
         with:
           node-version: 24
-      - uses: actions/setup-dotnet@v4
+      - run: npm install --global pnpm@10.33.3
+      - uses: https://gitea.com/actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
       - run: pnpm install --frozen-lockfile
@@ -68,7 +72,7 @@ jobs:
           trap 'rm -f "$npm_config_userconfig"' EXIT
           printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$npm_config_userconfig"
           npm publish artifacts/agentbridgelens-*.tgz --ignore-scripts --access public --registry=https://registry.npmjs.org
-      - uses: actions/upload-artifact@v3
+      - uses: https://gitea.com/actions/upload-artifact@v3
         if: always()
         with:
           name: bridge-release-${{ gitea.sha }}

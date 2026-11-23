@@ -17,6 +17,7 @@ export class DesktopProcess implements DesktopExecutor {
     private readonly launch: ExecutorCommand,
   ) {}
   private child?: ChildProcessWithoutNullStreams;
+  private exits = new Set<Promise<void>>();
   private pending = new PendingRequests();
   private closed = false;
   async send(
@@ -61,6 +62,9 @@ export class DesktopProcess implements DesktopExecutor {
       shell: false,
     });
     this.child = child;
+    const exited = new Promise<void>((resolve) => child.once("close", () => resolve()));
+    this.exits.add(exited);
+    void exited.then(() => this.exits.delete(exited));
     let buffer = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -129,6 +133,7 @@ export class DesktopProcess implements DesktopExecutor {
   async stopAndClose() {
     if (!this.child) {
       this.close();
+      await Promise.all(this.exits);
       return;
     }
     let timer: NodeJS.Timeout | undefined;
@@ -143,6 +148,9 @@ export class DesktopProcess implements DesktopExecutor {
     } finally {
       clearTimeout(timer);
       this.close();
+      // Reap terminated workers before the Bridge calls process.exit().
+      // Container PID 1 may not reap an orphaned child for us.
+      await Promise.all(this.exits);
     }
   }
 }

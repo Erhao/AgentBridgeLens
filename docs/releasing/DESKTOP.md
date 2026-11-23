@@ -17,7 +17,7 @@
 
 Windows 交叉编译和 PE 校验不等于 Windows 真机 GUI 验收，发布说明会明确这一限制。原生 Windows 运行器离线时不假报通过。
 
-通过全部检查后，先上传并回下载验证 Gitea Generic 制品，再直接上传完全相同的字节到 GitHub Releases。每个 main 提交创建 `desktop-build-<版本>-dev.<提交短哈希>` 预发布；`desktop-vX.Y.Z` 标签创建正式桌面 Release。桌面 Release 设置 `make_latest=false`，保留 Chrome updater 对最新正式扩展的发现。
+通过全部检查后，先上传并回下载验证 Gitea Generic 制品，再直接上传完全相同的字节到 GitHub Releases。每次成功的 main 构建创建 `desktop-build-<版本>-dev.<提交短哈希>` 预发布；更新的 main 构建会取消尚未完成的旧构建，正式标签构建不互相取消。`desktop-vX.Y.Z` 标签创建正式桌面 Release。桌面 Release 设置 `make_latest=false`，保留 Chrome updater 对最新正式扩展的发现。
 
 GitHub 上传先建立草稿，全部附件回下载 SHA256 校验通过后才公开；重试只接受相同字节，禁止覆盖已发布的不同制品。Gitea Secret `GH_RELEASE_TOKEN` 提供 GitHub 目标仓库的 Contents 写权限；不依赖 GitHub Actions token 或执行 GitHub workflow。
 

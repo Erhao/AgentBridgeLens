@@ -5,7 +5,7 @@
   <key>CFBundleDisplayName</key><string>AgentBridgeMac</string>
   <key>CFBundleIdentifier</key><string>tech.xinyu.agentbridgemac</string>
   <key>CFBundleVersion</key><string>4</string>
-  <key>CFBundleShortVersionString</key><string>0.2.0</string>
+  <key>CFBundleShortVersionString</key><string>0.6.0</string>
   <key>CFBundleExecutable</key><string>AgentBridgeMac</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>14.2</string>

@@ -1,12 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readFile, rename } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { packageVersion, publishPackages } from "./packages.mjs";
+import { packageUpdater } from "./updater-package.mjs";
 
 const sha = "a".repeat(40);
+const root = fileURLToPath(new URL("../../", import.meta.url));
 test("release tags match the project version and main builds get unique development versions", () => {
   assert.equal(
     packageVersion("0.1.2", "refs/tags/desktop-v0.1.2", sha),
@@ -18,13 +22,18 @@ test("release tags match the project version and main builds get unique developm
   );
   assert.throws(() => packageVersion("0.1.2", "refs/tags/desktop-v9.0.0", sha));
   assert.throws(() => packageVersion("0.1.2", "refs/heads/feature", sha));
+  assert.throws(() => packageVersion("0.1.2-beta.1", "refs/heads/main", sha));
+  assert.throws(() => packageVersion("0.1.2", "refs/heads/main", "short"));
 });
 
-test("publishes four files, links the repo, verifies downloads and refuses changed immutable bytes", async (t) => {
+test("publishes native, Bridge and updater files, verifies downloads and refuses changed immutable bytes", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "abm-registry-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  await writeFile(join(dir, "agentbridgelens-macos-0.2.0-arm64.zip"), "native");
+  await writeFile(join(dir, "agentbridgelens-macos-0.1.2-arm64.zip"), "native");
+  await writeFile(join(dir, "agentbridgelens-windows-0.1.2-x64.zip"), "windows");
+  await writeFile(join(dir, "agentbridgelens-linux-0.1.2-x64.tgz"), "linux");
   await writeFile(join(dir, "agentbridgelens-bridge-0.1.2.tgz"), "bridge");
+  await packageUpdater(root, dir);
   const stored = new Map();
   let links = 0;
   const server = createServer(async (req, res) => {
@@ -80,13 +89,13 @@ test("publishes four files, links the repo, verifies downloads and refuses chang
     token: "test-secret",
     version: "0.1.2",
     baseVersion: "0.1.2",
-    nativeVersion: "0.2.0",
+    nativeVersion: "0.1.2",
     sha,
     artifactsDir: dir,
   };
   const result = await publishPackages(config);
-  assert.equal(result.files.length, 4);
-  assert.equal(stored.size, 4);
+  assert.equal(result.files.length, 8);
+  assert.equal(stored.size, 8);
   assert.equal(links, 1);
   const sums = await readFile(join(dir, "SHA256SUMS"), "utf8");
   assert.match(sums, /  BUILD-MANIFEST.json/);
@@ -95,20 +104,58 @@ test("publishes four files, links the repo, verifies downloads and refuses chang
     await readFile(join(dir, "BUILD-MANIFEST.json"), "utf8"),
   );
   assert.equal(manifest.source.commit, sha);
+  assert.equal(manifest.nativeVersion, manifest.bridgeVersion);
+  assert.deepEqual(manifest.nativePackages, [
+    { name: "agentbridgelens-linux-0.1.2-x64.tgz", platform: "linux", architecture: "x64", version: "0.1.2" },
+    { name: "agentbridgelens-macos-0.1.2-arm64.zip", platform: "macos", architecture: "arm64", version: "0.1.2" },
+    { name: "agentbridgelens-windows-0.1.2-x64.zip", platform: "windows", architecture: "x64", version: "0.1.2" },
+  ]);
+  assert.equal(manifest.updater.name, "agentbridgelens-updater.zip");
+  const updater = stored.get("/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-updater.zip");
+  const updaterHash = createHash("sha256").update(updater).digest("hex");
+  assert.equal(stored.get("/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-updater.zip.sha256").toString(),
+    `${updaterHash}  agentbridgelens-updater.zip\n`);
+  assert.match(sums, new RegExp(`${updaterHash}  agentbridgelens-updater.zip\\n`));
   await publishPackages(config);
-  assert.equal(stored.size, 4);
+  assert.equal(stored.size, 8);
   assert.equal(links, 1);
   await writeFile(
-    join(dir, "agentbridgelens-macos-0.2.0-arm64.zip"),
+    join(dir, "agentbridgelens-macos-0.1.2-arm64.zip"),
     "changed",
   );
   await assert.rejects(publishPackages(config), /Immutable package conflict/);
   assert.equal(
     stored
       .get(
-        "/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-macos-0.2.0-arm64.zip",
+        "/api/packages/xinyu/generic/agentbridgelens/0.1.2/agentbridgelens-macos-0.1.2-arm64.zip",
       )
       .toString(),
     "native",
   );
+});
+
+test("rejects missing updaters, mixed platform versions and corrupt checksums before any upload", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "abl-registry-invalid-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const config = {
+    serverUrl: "http://127.0.0.1:1", repository: "xinyu/AgentBridgeLens", token: "test-secret",
+    version: "0.1.2", baseVersion: "0.1.2", nativeVersion: "0.1.2", sha, artifactsDir: dir,
+  };
+  await writeFile(join(dir, "agentbridgelens-macos-0.1.2-arm64.zip"), "native");
+  await writeFile(join(dir, "agentbridgelens-bridge-0.1.2.tgz"), "bridge");
+  await assert.rejects(publishPackages(config), /semi-automatic updater/);
+  await packageUpdater(root, dir);
+  await assert.rejects(publishPackages({ ...config, nativeVersion: "0.2.0" }), /Native and Bridge versions must match/);
+  await assert.rejects(publishPackages({ ...config, version: "9.0.0" }), /Registry version must match/);
+  for (const platform of ["macos", "windows", "linux"]) {
+    const file = join(dir, `agentbridgelens-${platform}-9.0.0-arm64.zip`);
+    await writeFile(file, "wrong version");
+    await assert.rejects(publishPackages(config), /Native archive must match desktop version/);
+    await rm(file);
+  }
+  await rename(join(dir, "agentbridgelens-bridge-0.1.2.tgz"), join(dir, "agentbridgelens-bridge-9.0.0.tgz"));
+  await assert.rejects(publishPackages(config), /versioned Bridge archive/);
+  await rename(join(dir, "agentbridgelens-bridge-9.0.0.tgz"), join(dir, "agentbridgelens-bridge-0.1.2.tgz"));
+  await writeFile(join(dir, "agentbridgelens-updater.zip.sha256"), "wrong checksum");
+  await assert.rejects(publishPackages(config), /Updater SHA256 does not match/);
 });

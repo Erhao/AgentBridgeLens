@@ -1,31 +1,91 @@
-name: Unified desktop build and registry
+name: Gitea desktop build and GitHub delivery
 on:
   push:
     branches: [main]
     tags: ["desktop-v*"]
   workflow_dispatch:
+concurrency:
+  group: desktop-${{ gitea.ref }}
+  cancel-in-progress: false
 jobs:
-  macos:
+  linux-windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: pnpm install --frozen-lockfile
+      - name: Verify versions, shared packages, Bridge and release safety
+        run: |
+          node scripts/release/desktop-version.mjs --check
+          pnpm typecheck
+          pnpm --dir packages/bridge test
+          pnpm test:contracts
+          pnpm test:release
+          pnpm test:updater
+      - name: Install isolated Linux desktop test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core gir1.2-gtk-3.0 \
+            gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-pipewire \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb xauth dbus-x11 libx11-6 libxtst6
+      - name: Linux GTK and D-Bus integration in a virtual desktop
+        run: |
+          dbus-run-session -- xvfb-run -a env ABL_DESKTOP_INTEGRATION=1 GIO_USE_VFS=local \
+            /usr/bin/python3 -m unittest discover -s platforms/linux/tests -p 'test_*.py' -v
+      - name: Cross-compile and validate Windows x64 and ARM64 executors
+        run: bash scripts/build/windows.sh
+      - uses: actions/upload-artifact@v3
+        with:
+          name: native-executors-${{ gitea.sha }}
+          path: artifacts/*
+          if-no-files-found: error
+  macos-publish:
+    needs: linux-windows
     runs-on: macos-arm64
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install workspace
         run: npx --yes pnpm@10.33.3 install --frozen-lockfile
-      - name: Check shared packages and Bridge
+      - uses: actions/download-artifact@v3
+        with:
+          name: native-executors-${{ gitea.sha }}
+          path: artifacts
+      - name: Restore exact-commit Windows executors
+        run: |
+          version="$(node scripts/release/desktop-version.mjs --check)"
+          for arch in x64 arm64; do
+            mkdir -p "packages/bridge/windows-agent/win-$arch"
+            unzip -q "artifacts/agentbridgelens-windows-$version-$arch.zip" -d "packages/bridge/windows-agent/win-$arch"
+          done
+          node --input-type=module -e 'import {validateWindowsExecutors} from "./scripts/release/bridge.mjs"; await validateWindowsExecutors("packages/bridge");'
+      - name: Check shared packages and real Mac transport
         run: |
           npx --yes pnpm@10.33.3 typecheck
           npx --yes pnpm@10.33.3 --dir packages/bridge test
           npx --yes pnpm@10.33.3 test:contracts
-          node --test scripts/release/packages.test.mjs
-      - name: Build Mac companion
-        run: bash scripts/build/macos.sh package
-      - name: Verify actual Swift client through unified MCP
-        run: node scripts/test/macos-transport.mjs
-      - name: Package standalone Bridge
+          node --test scripts/update/*.test.mjs
+          bash scripts/build/macos.sh package
+          node scripts/test/macos-transport.mjs
+      - name: Package standalone Bridge and semi-automatic updater
         run: |
           export PATH="$(dirname "$(command -v node)"):$PATH"
           npx --yes --package pnpm@10.33.3 -c 'bash scripts/build/bundle-bridge.sh'
-      - name: Publish immutable registry files and verify downloads
+          node scripts/release/updater-package.mjs artifacts
+      - name: Test the distributed Bridge outside the workspace
+        run: |
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf artifacts/agentbridgelens-bridge-*.tgz -C "$smoke_dir"
+          ABL_BRIDGE_ENTRY="$smoke_dir/bridge/dist/index.js" node --test packages/bridge/test/*.test.mjs
+      - name: Publish immutable Gitea registry files and verify downloads
         env:
           GITEA_SERVER_URL: ${{ gitea.server_url }}
           GITEA_REPOSITORY: ${{ gitea.repository }}
@@ -33,11 +93,15 @@ jobs:
           GITEA_SHA: ${{ gitea.sha }}
           GITEA_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: node scripts/release/packages.mjs
+      - name: Upload the verified Gitea files directly to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GITEA_REF: ${{ gitea.ref }}
+          GITEA_SHA: ${{ gitea.sha }}
+          NODE_USE_ENV_PROXY: '1'
+        run: node scripts/release/github.mjs artifacts
       - uses: actions/upload-artifact@v3
+        if: always()
         with:
           name: unified-desktop-${{ gitea.sha }}
-          path: |
-            artifacts/*.zip
-            artifacts/*.tgz
-            artifacts/SHA256SUMS
-            artifacts/BUILD-MANIFEST.json
+          path: artifacts/*

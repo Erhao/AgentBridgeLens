@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 function crc32(data) {
   let crc = 0xffffffff;
@@ -60,4 +61,8 @@ export async function packageUpdater(cwd, out) {
   const zip = createZip(entries), name = "agentbridgelens-updater.zip";
   await writeFile(join(out, name), zip);
   await writeFile(join(out, `${name}.sha256`), `${createHash("sha256").update(zip).digest("hex")}  ${name}\n`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await packageUpdater(resolve(import.meta.dirname, "../.."), resolve(process.argv[2] ?? "artifacts"));
 }

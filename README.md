@@ -264,7 +264,7 @@ node update-extension.mjs --proxy http://127.0.0.1:7897
 
 ## 🛠️ 从源码运行
 
-插件安装包默认通过 GitHub Actions 构建并从 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 交付；仅在用户专门要求时本地构建安装包，详见[发布约定](docs/RELEASING.md#默认交付约定)。以下源码构建命令用于开发调试。
+插件安装包默认通过 Gitea Actions 构建和校验，完成后直接上传到 [GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest) 交付；仅在用户专门要求时本地构建安装包，详见[发布约定](docs/RELEASING.md#默认交付约定)。以下源码构建命令用于开发调试。
 
 仓库使用 **pnpm 10.33.3**。自动发布工具链使用 Node.js 24，开发时建议与之保持一致。
 

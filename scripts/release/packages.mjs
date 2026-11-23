@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, readdir, lstat } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { desktopVersion, validateDesktopVersion } from "./desktop-version.mjs";
 
 const digest = (data) => createHash("sha256").update(data).digest("hex");
 const segment = (value) => encodeURIComponent(value);
 
 export function packageVersion(baseVersion, ref, sha) {
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(baseVersion))
-    throw new Error("Invalid project version.");
+  validateDesktopVersion(baseVersion);
   if (!/^[a-f0-9]{40}$/.test(sha))
     throw new Error("Expected a full Git commit SHA.");
   if (ref.startsWith("refs/tags/")) {
@@ -31,6 +31,7 @@ export async function publishPackages({
   artifactsDir,
   baseVersion,
   nativeVersion,
+  distribution = "desktop",
 }) {
   const server = new URL(serverUrl);
   if (
@@ -48,21 +49,34 @@ export async function publishPackages({
   if (!token) throw new Error("GITEA_PACKAGES_TOKEN is required.");
   if (!/^[0-9A-Za-z.+-]+$/.test(version) || !/^[a-f0-9]{40}$/.test(sha))
     throw new Error("Invalid package version or commit.");
+  validateDesktopVersion(baseVersion);
+  if (nativeVersion !== baseVersion)
+    throw new Error("Native and Bridge versions must match before publishing.");
+  if (version !== baseVersion && version !== `${baseVersion}-dev.${sha.slice(0, 12)}`)
+    throw new Error("Registry version must match the desktop version and commit.");
   const [owner, repo] = parts;
-  const name = "agentbridgelens";
-  const entries = (await readdir(artifactsDir))
+  if (!["desktop", "bridge"].includes(distribution)) throw new Error("Unknown distribution.");
+  const name = distribution === "bridge" ? "agentbridgelens-npm" : "agentbridgelens";
+  const archives = (await readdir(artifactsDir))
     .filter((n) => /\.(zip|tgz)$/.test(n))
     .sort();
-  if (
-    entries.length !== 2 ||
-    !entries.some((n) =>
-      /^agentbridgelens-macos-[0-9.]+-(arm64|x86_64)\.zip$/.test(n),
-    ) ||
-    !entries.includes(`agentbridgelens-bridge-${baseVersion}.tgz`)
-  )
-    throw new Error(
-      "Expected exactly one native ZIP and one versioned Bridge archive.",
-    );
+  const bridge = distribution === "bridge" ? `agentbridgelens-${baseVersion}.tgz` : `agentbridgelens-bridge-${baseVersion}.tgz`;
+  const updater = "agentbridgelens-updater.zip";
+  if (!archives.includes(bridge) || !archives.includes(updater))
+    throw new Error("Expected a versioned Bridge archive and semi-automatic updater ZIP.");
+  const native = archives.filter((file) => file !== bridge && file !== updater);
+  if (!native.length && distribution === "desktop") throw new Error("Expected at least one native desktop archive.");
+  if (native.length && distribution === "bridge") throw new Error("Unexpected archive in the npm distribution.");
+  const nativePackages = native.map((file) => {
+    const match = file.match(/^agentbridgelens-(macos|windows|linux)-([0-9.]+)-(arm64|x86_64|x64)\.(zip|tgz)$/);
+    if (!match || match[2] !== baseVersion
+        || (match[1] === "macos" && !["arm64", "x86_64"].includes(match[3]))
+        || (match[1] === "windows" && !["arm64", "x64"].includes(match[3]))
+        || (match[1] !== "linux" && match[4] !== "zip"))
+      throw new Error(`Native archive must match desktop version ${baseVersion} and platform: ${file}`);
+    return { name: file, platform: match[1], architecture: match[3], version: baseVersion };
+  });
+  const entries = [...archives, `${updater}.sha256`, ...(distribution === "bridge" ? [`${bridge}.sha256`] : [])].sort();
   const payloads = new Map();
   const files = [];
   for (const file of entries) {
@@ -73,6 +87,8 @@ export async function publishPackages({
     payloads.set(file, bytes);
     files.push({ name: file, bytes: bytes.length, sha256: digest(bytes) });
   }
+  if (payloads.get(`${updater}.sha256`).toString() !== `${digest(payloads.get(updater))}  ${updater}\n`)
+    throw new Error("Updater SHA256 does not match its ZIP; refusing to publish.");
   const manifest = Buffer.from(
     JSON.stringify(
       {
@@ -81,6 +97,8 @@ export async function publishPackages({
         source: { repository, commit: sha },
         nativeVersion,
         bridgeVersion: baseVersion,
+        nativePackages,
+        updater: { name: updater, purpose: "Semi-automatic Chrome extension update; reload the extension after updating." },
         files,
       },
       null,
@@ -175,25 +193,28 @@ if (
 ) {
   try {
     const root = resolve(import.meta.dirname, "../..");
-    const project = JSON.parse(
-      await readFile(join(root, "packages/bridge/package.json"), "utf8"),
-    );
+    const baseVersion = await desktopVersion(root);
     const sha = process.env.GITEA_SHA ?? "";
+    const ref = process.env.GITEA_REF ?? "";
+    const distribution = process.argv[2] === "bridge" ? "bridge" : "desktop";
+    if (distribution === "bridge" && ref !== `refs/tags/bridge-v${baseVersion}`)
+      throw new Error("Bridge release tag must match the desktop version.");
     await publishPackages({
       serverUrl: process.env.GITEA_SERVER_URL ?? "",
       repository: process.env.GITEA_REPOSITORY ?? "",
       token: process.env.GITEA_PACKAGES_TOKEN,
-      version: packageVersion(
-        project.version,
-        process.env.GITEA_REF ?? "",
+      version: distribution === "bridge" ? baseVersion : packageVersion(
+        baseVersion,
+        ref,
         sha,
       ),
-      baseVersion: project.version,
+      baseVersion,
       sha,
       nativeVersion: JSON.parse(
         await readFile(join(root, "platforms/macos/version.json"), "utf8"),
       ).version,
       artifactsDir: join(root, "artifacts"),
+      distribution,
     });
   } catch (error) {
     console.error(error.message);

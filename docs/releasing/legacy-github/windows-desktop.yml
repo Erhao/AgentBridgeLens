@@ -31,6 +31,11 @@ jobs:
         architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify unified desktop versions
+        run: node scripts/release/desktop-version.mjs --check
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -48,11 +53,6 @@ jobs:
           -p:RestoreLockedMode=true --output packages/bridge/windows-agent/win-${{ matrix.architecture }}
       - uses: pnpm/action-setup@v4
         if: matrix.architecture == 'x64'
-      - uses: actions/setup-node@v4
-        if: matrix.architecture == 'x64'
-        with:
-          node-version: 24
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: matrix.architecture == 'x64'
       - run: pnpm --dir packages/bridge typecheck

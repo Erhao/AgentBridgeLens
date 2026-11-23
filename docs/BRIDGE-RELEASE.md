@@ -2,31 +2,17 @@
 
 Bridge tags (`bridge-vX.Y.Z`) are independent of extension tags (`extension-vX.Y.Z`). Source package versions and MCP initialization always match, and `agentbridgelens --version` prints the installed version without starting a server.
 
-Release artifacts are built by GitHub Actions and delivered through GitHub Releases. Follow the project policy in [AGENTS.md](../AGENTS.md): do not build a local extension installation ZIP unless the user explicitly requests one.
+Release artifacts are built and tested by Gitea Actions, stored in Gitea Generic Registry, then uploaded directly to GitHub Releases. GitHub does not run CI/CD. Do not build local installation packages unless explicitly requested.
 
 ## Release process
 
-1. Update `packages/bridge/package.json` and `packages/bridge/CHANGELOG.md`.
-2. Commit and push to `main`, then push `bridge-vX.Y.Z` pointing at that commit.
-3. `bridge-release.yml` builds the Windows x64/ARM64 executors through `windows-desktop.yml`, runs native/protocol checks, and downloads those exact-commit artifacts before packaging. It checks the tag/version, required executor files and PE architectures, typechecks and tests the Bridge, builds an npm tarball and SHA256, installs that exact tarball outside the workspace, and runs stdio/HTTP/relay tests against the installed package. Windows GUI tests explicitly skip on noninteractive runners; this does not replace real desktop acceptance.
-4. The tested artifact is released on GitHub with `latest=false`, so extension updaters using `/releases/latest` continue to discover extension releases.
-5. A separate job publishes the same artifact to npm using OIDC. A failed npm job does not remove the GitHub release or imply registry success. Check both jobs and `npm view agentbridgelens version` before announcing npm availability.
+1. Update `packages/bridge/package.json` and `packages/bridge/CHANGELOG.md`, then run `node scripts/release/desktop-version.mjs --write`. Commit the synchronized native metadata; the extension keeps its independent version.
+2. Push the same main commit to GitHub and Gitea, then push `bridge-vX.Y.Z` to both repositories.
+3. `.gitea/workflows/bridge-release.yml` checks versions, cross-compiles Windows x64/ARM64 executors, validates their PE architectures, typechecks and tests Bridge, then creates the npm tarball and checksum. The exact tarball is installed and tested outside the workspace. Windows GUI acceptance is not performed by cross-compilation.
+4. Gitea publishes the tested package and updater to the Generic package `agentbridgelens-npm`, verifies downloads, then uploads the identical files directly to GitHub with `make_latest=false`. GitHub latest continues to identify the extension release.
+5. npm publication is a separate Gitea step. It requires the optional `NPM_TOKEN` secret with publish access to `agentbridgelens`; GitHub OIDC is not available in Gitea. When absent, the step explicitly reports npm publication skipped. A GitHub Release alone does not imply npm publication. Check `npm view agentbridgelens version` before announcing npm availability.
 
-## One-time npm trusted publisher setup
-
-A package maintainer must sign into npm and open:
-
-https://www.npmjs.com/package/agentbridgelens/access
-
-In Trusted Publisher, choose GitHub Actions and enter:
-
-- Organization or user: `Erhao`
-- Repository: `AgentBridgeLens`
-- Workflow filename: `bridge-release.yml` (filename only)
-- Environment: leave blank (the workflow does not use an environment)
-- If the UI offers allowed actions, allow direct `npm publish`.
-
-The workflow uses a GitHub-hosted runner, Node.js 24, and `id-token: write`. It does not require an npm token in repository secrets. See https://docs.npmjs.com/trusted-publishers/ . After setting up trust, rerun the failed npm job on the Bridge tag. Do not rerun a successful npm publication; npm versions are immutable.
+GitHub delivery uses Gitea Secret `GH_RELEASE_TOKEN` with Contents write access; registry publication uses `PACKAGES_TOKEN`. Never store token values in source or print them in logs.
 
 ## Installation before npm publication
 

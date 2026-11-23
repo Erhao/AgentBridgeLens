@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+node scripts/release/desktop-version.mjs --check
 mkdir -p artifacts
 bundle_stage="$(mktemp -d "${TMPDIR:-/tmp}/agentbridgelens-bundle.XXXXXX")"
 trap 'rm -rf "$bundle_stage"' EXIT

@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ "$(uname -s)" == Darwin ]] || { echo 'Native Mac checks require macOS.' >&2; exit 1; }
+node scripts/release/desktop-version.mjs --check
 swift build --package-path platforms/macos -c release --product AgentBridgeMac
 swift run --package-path platforms/macos BridgeCoreChecks packages/protocol/fixtures/native-v1.json
 binary_dir="$(swift build --package-path platforms/macos -c release --show-bin-path)"

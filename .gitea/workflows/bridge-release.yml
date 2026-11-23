@@ -1,0 +1,75 @@
+name: Gitea Bridge package and GitHub release
+on:
+  push:
+    tags: ['bridge-v*']
+  workflow_dispatch:
+concurrency:
+  group: bridge-release-${{ gitea.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: pnpm install --frozen-lockfile
+      - name: Validate versions and build Windows executors
+        run: bash scripts/build/windows.sh
+      - run: pnpm typecheck
+      - run: pnpm --dir packages/bridge test
+      - run: pnpm test:contracts
+      - run: pnpm test:release
+      - name: Build exact versioned npm tarball and checksum
+        env:
+          BRIDGE_TAG: ${{ gitea.ref_name }}
+        run: node scripts/release/bridge.mjs "$BRIDGE_TAG"
+      - name: Test the installed npm package outside the workspace
+        run: |
+          npm install --prefix "$RUNNER_TEMP/bridge-smoke" --ignore-scripts --package-lock=false "$GITHUB_WORKSPACE"/release/agentbridgelens-*.tgz
+          ABL_BRIDGE_ENTRY="$RUNNER_TEMP/bridge-smoke/node_modules/agentbridgelens/dist/index.js" node --test packages/bridge/test/*.test.mjs
+      - name: Stage the tested npm package and updater
+        run: |
+          rm -rf artifacts
+          mkdir artifacts
+          cp release/agentbridgelens-* artifacts/
+          node scripts/release/updater-package.mjs artifacts
+      - name: Publish and verify the Gitea npm distribution
+        env:
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_REPOSITORY: ${{ gitea.repository }}
+          GITEA_REF: ${{ gitea.ref }}
+          GITEA_SHA: ${{ gitea.sha }}
+          GITEA_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: node scripts/release/packages.mjs bridge
+      - name: Deliver the verified package to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GITEA_REF: ${{ gitea.ref }}
+          GITEA_SHA: ${{ gitea.sha }}
+          NODE_USE_ENV_PROXY: '1'
+        run: node scripts/release/github.mjs artifacts
+      - name: Publish to npm only when a Gitea npm token is configured
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo 'NPM_TOKEN is not configured: npm publication skipped; GitHub delivery is complete.'
+            exit 0
+          fi
+          npm_config_userconfig="$RUNNER_TEMP/abl-npmrc"
+          export npm_config_userconfig
+          trap 'rm -f "$npm_config_userconfig"' EXIT
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$npm_config_userconfig"
+          npm publish artifacts/agentbridgelens-*.tgz --ignore-scripts --access public --registry=https://registry.npmjs.org
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: bridge-release-${{ gitea.sha }}
+          path: artifacts/*

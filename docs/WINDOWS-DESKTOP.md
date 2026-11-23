@@ -112,6 +112,6 @@ Core 测试可以在 Linux 运行，覆盖坐标边界、负原点、引用淘�
 
 没有已解锁交互桌面的 CI 会明确跳过交互测试；设置 `ABL_REQUIRE_INTERACTIVE=1` 可让缺少桌面成为验收失败。跳过不等于真实桌面验证通过。真实验收还需覆盖记事本保存、目标应用、100%/150%/200% 缩放、不同 DPI 双屏、遮挡、焦点改变、提权窗口、取消和停止。
 
-`.github/workflows/windows-desktop.yml` 构建并上传 win-x64 / win-arm64 制品。Bridge 发版调用同一工作流，将对应提交的两个执行端纳入 npm 包；打包前验证必需文件及 PE 架构。通过 GitHub Actions / Releases 交付，Bridge 与扩展分别发版。
+`.gitea/workflows/desktop.yml` 在 Linux 上交叉编译 win-x64 / win-arm64 制品，打包前验证必需文件及 PE 架构。Bridge 发版由 `.gitea/workflows/bridge-release.yml` 将同提交的两个执行端纳入 npm 包。制品经 Gitea 构建、校验和入库后直接上传 GitHub Releases；不运行 GitHub CI/CD，Bridge 与扩展分别发版。Windows 真机 GUI 验收另行执行。
 
 官方接口：[UIA](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-uiautomationoverview)、[线程模型](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading)、[Windows Graphics Capture](https://learn.microsoft.com/en-us/windows/apps/develop/media-authoring-processing/screen-capture)、[SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)。

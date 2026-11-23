@@ -118,7 +118,9 @@ export async function publishPackages({
   const options = {
     headers,
     redirect: "error",
-    signal: AbortSignal.timeout(60_000),
+    // Give each request its own deadline; native runtimes can be hundreds of
+    // megabytes, and one shared signal would expire midway through the batch.
+    get signal() { return AbortSignal.timeout(300_000); },
   };
   const packageBase = `${base}/api/packages/${segment(owner)}/generic/${name}/${segment(version)}`;
   let linked = false;

@@ -14,6 +14,9 @@ after(() => rm(temporary, { recursive: true, force: true }));
 await build({ entry: { desktop: fileURLToPath(new URL("../src/desktop.ts", import.meta.url)),
   windows: fileURLToPath(new URL("../src/windows-desktop.ts", import.meta.url)) },
   outDir: temporary, outExtension: () => ({ js: ".mjs" }), format: ["esm"], dts: false, silent: true, noExternal: [/^@agentbridgelens\//],
+  // Keep production dependencies external even when installed-package checks
+  // invoke this source-only helper from the workspace root.
+  external: ["ws", "zod"],
 });
 const { DesktopProcess, registerDesktopTools } = await import(pathToFileURL(join(temporary, "desktop.mjs")));
 const { WindowsDesktop } = await import(pathToFileURL(join(temporary, "windows.mjs")));

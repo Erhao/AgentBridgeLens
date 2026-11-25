@@ -20,6 +20,8 @@ For recovery of a previously delivered Gitea package, manually dispatch the GitH
 
 GitHub delivery uses Gitea Secret `GH_RELEASE_TOKEN` with Contents write access; registry publication uses `PACKAGES_TOKEN`. Never store token values in source or print them in logs.
 
+Main-branch desktop builds watch package, platform, build and updater inputs. Documentation and publication-workflow-only changes do not rebuild native executors; use workflow_dispatch when explicitly validating such a workflow change.
+
 ## Installation before npm publication
 
 Use the GitHub release tarball with `npm install -g <official-tgz-URL>`. It includes compiled JavaScript and requires no local source build. Keep your service's original host/port/token settings; point the service/MCP command at the installed executable and restart it, then reconnect the MCP client. Installing a package does not change running processes or existing launch paths.

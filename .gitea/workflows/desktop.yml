@@ -3,6 +3,16 @@ on:
   push:
     branches: [main]
     tags: ["desktop-v*"]
+    paths:
+      - 'platforms/**'
+      - 'packages/**'
+      - 'scripts/build/**'
+      - 'scripts/test/**'
+      - 'scripts/update/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
   workflow_dispatch:
 env:
   HTTPS_PROXY: http://10.0.0.246:7897

@@ -61,7 +61,17 @@ export async function startHttpServer(relay: WsRelay, options: HttpOptions) {
       reply(res, 405, "Standalone SSE streams and sessions are not supported");
       return;
     }
-    const server = createMcpServer(relay, options.desktop);
+    const query = new URL(req.url!, "http://localhost").searchParams;
+    const ids = query.getAll("browserId");
+    if (ids.length > 1 || (ids.length === 1 && (!ids[0] || ids[0].length > 200))) {
+      reply(res, 400, "Invalid browserId binding");
+      return;
+    }
+    if (process.env.BRIDGELENS_BROWSER_ID && ids[0] && ids[0] !== process.env.BRIDGELENS_BROWSER_ID) {
+      reply(res, 400, "browserId conflicts with the server browser binding");
+      return;
+    }
+    const server = createMcpServer(relay, options.desktop, ids[0] ?? process.env.BRIDGELENS_BROWSER_ID);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     active.add(server);
     res.once("close", () => {

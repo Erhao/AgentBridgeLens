@@ -28,6 +28,27 @@ const profiles = [
   { id: "b", name: "Server B", host: "192.168.1.2", port: 19222, token: "b", enabled: true, color: "#c084fc" },
 ];
 
+test("browser identity is registered first and reused across independent bridge connections", async t => {
+  const previous = globalThis.WebSocket;
+  globalThis.WebSocket = Socket;
+  Socket.instances = [];
+  const identity = { browserId: "72addc06-1d94-47a2-85c4-84400da367dd", name: "M5 Chrome" };
+  const manager = new BridgeConnections(async () => ({ ok: true }));
+  t.after(() => { manager.update([], false); globalThis.WebSocket = previous; });
+  manager.setIdentity(identity);
+  manager.update(profiles, true);
+  for (const socket of Socket.instances) {
+    socket.onopen();
+    assert.deepEqual(socket.sent[0], { t: "register_browser", protocolVersion: 2, ...identity });
+    await socket.receive({ t: "browser_registered", protocolVersion: 2, browserId: identity.browserId });
+    assert.equal(socket.sent.length, 1, "registration acknowledgement is not a page request");
+    await socket.receive({ id: "request", tool: "get_page_info", params: {} });
+    assert.deepEqual(socket.sent[1], { id: "request", result: { ok: true } });
+  }
+  assert.ok(manager.status().every(status => status.browserId === identity.browserId));
+  assert.throws(() => manager.setIdentity({ ...identity, browserId: "different" }), /Cannot change/);
+});
+
 test("multiple bridges route identical IDs, errors and out-of-order results to their own sockets", async (t) => {
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = Socket;

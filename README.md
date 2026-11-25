@@ -333,3 +333,7 @@ ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/readme/screensh
 连接失败后按 3、6、12、24…秒指数退避重试，最长等待 600 秒，每次连接最多等待 10 秒。连接成功或点击“立即重连”后重置退避。每个服务独立退避，扩展后台休眠后仍保留等待进度；30 秒周期的唤醒不会提前重连。弹窗和侧边栏会分别显示各服务的连接阶段、尝试次数、最近尝试时间、重试倒计时和最近错误，也可点击“立即重连”。新版 Bridge 在 WebSocket 同一端口提供 `/health` 诊断：HTTP 401 提示核对 Token；旧版服务不支持诊断时会明确提示无法确认鉴权结果。准确的鉴权诊断需要同时更新扩展和 Bridge。
 
 遇到“未连接”，先确认**授权已应用、MCP 客户端已启动 Bridge、两端 WebSocket 地址/端口/Token 一致**。如果显示已连接但无法操作，确认目标是普通网页且扩展拥有该站点的访问权限。新版会自动恢复失效的网页脚本；若仍出现恢复失败提示，再刷新该页面重试。需要进一步排查时，从 `chrome://extensions/` 打开扩展的 Service Worker 控制台查看日志，或 [提交 Issue](https://github.com/Erhao/AgentBridgeLens/issues)。
+
+## 多浏览器并发连接
+
+插件使用稳定 browserId 注册，AI 可通过 `list_browsers` 发现浏览器，再用工具参数或 MCP 地址 `?browserId=<ID>` 明确选择。目标离线时不会自动换到另一台浏览器。Bridge 与扩展需要同时升级，详见 [多浏览器路由](docs/BROWSER-ROUTING.md)。

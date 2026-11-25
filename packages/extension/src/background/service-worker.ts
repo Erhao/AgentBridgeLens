@@ -8,6 +8,7 @@ import { describeActivity, activitiesForWindow, type Activity } from "../shared/
 import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
 import { ContentConnection } from "./content-connection";
 import { BridgeConnections, type BridgeSource, type BridgeRetryState } from "./bridge-connections";
+import { getBrowserIdentity } from "./browser-identity";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 import {
   startCdpNetwork,
@@ -30,6 +31,7 @@ let profileKeys = new Map<string, string>();
 let retryStateRestored = false;
 let retrySave = Promise.resolve();
 const storedRetryState = chrome.storage.session.get("connectionRetryState").catch(() => ({}));
+const browserIdentity = getBrowserIdentity();
 const connections = new BridgeConnections(handleToolCall, retryState, (state) => {
   // Bind saved deadlines to the actual connection settings without persisting tokens.
   const snapshot = Object.fromEntries(Object.entries(state).map(([id, value]) => [
@@ -49,6 +51,7 @@ let configRevision = 0;
 let bridgeColors = new Map<string, string>();
 async function connect() {
   const revision = ++configRevision;
+  connections.setIdentity(await browserIdentity);
   const [profiles, { bridgeConsent }, stored] = await Promise.all([
     getBridgeProfiles(), chrome.storage.local.get("bridgeConsent"), storedRetryState,
   ]);

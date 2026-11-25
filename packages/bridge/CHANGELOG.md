@@ -1,4 +1,9 @@
-## Bridge 0.6.0 (development)
+## Bridge 0.6.0
+
+- Registers stable browser installation IDs and routes concurrent MCP calls to explicitly selected browsers.
+- Adds `list_browsers`, per-call `browserId`, HTTP `?browserId=` bindings and `BRIDGELENS_BROWSER_ID` for stdio.
+- Rejects duplicate live IDs, isolates replies and disconnects by socket, and never falls back to another browser when a target goes offline.
+- Requires the accompanying extension update for persistent browser registration; legacy extensions retain limited single-connection compatibility.
 
 - Consolidates browser and macOS/Windows/Linux support into one workspace and one MCP entry point.
 - Shares protocol schemas, request ownership, cancellation and image result conversion; bundles internal modules in the published Bridge.

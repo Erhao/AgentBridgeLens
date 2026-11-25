@@ -1,4 +1,15 @@
-/** Browser wire v1. Kept compatible with installed extensions. */
+import { z } from "zod";
+
+/** Registration is sent before responses; IDs identify installations, not tabs. */
+export const browserRegistration = z.object({
+  t: z.literal("register_browser"),
+  protocolVersion: z.literal(2),
+  browserId: z.string().uuid(),
+  name: z.string().trim().min(1).max(100),
+});
+export type BrowserIdentity = Pick<z.infer<typeof browserRegistration>, "browserId" | "name">;
+
+/** Browser request/response wire remains compatible with installed extensions. */
 export interface BridgeRequest {
   id: string;
   tool: string;

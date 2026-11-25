@@ -1,5 +1,6 @@
 import type { BridgeProfile } from "../shared/config";
 import type { BridgeRequest, BridgeResponse } from "../shared/protocol";
+import type { BrowserIdentity } from "@agentbridgelens/protocol/browser";
 
 export interface BridgeSource {
   id: string;
@@ -30,6 +31,7 @@ export interface BridgeRetryState {
 }
 
 export interface BridgeStatus {
+  browserId?: string;
   id: string;
   name: string;
   url: string;
@@ -50,7 +52,14 @@ export class BridgeConnections {
     private handle: (request: BridgeRequest, source: BridgeSource) => Promise<unknown>,
     private retryState: Record<string, BridgeRetryState> = {},
     private onRetryStateChange: (state: Record<string, BridgeRetryState>) => void = () => {},
+    private identity?: BrowserIdentity,
   ) {}
+
+  setIdentity(identity: BrowserIdentity) {
+    if (this.identity && this.identity.browserId !== identity.browserId)
+      throw new Error("Cannot change browser identity while running");
+    this.identity = identity;
+  }
 
   update(profiles: BridgeProfile[], consent: boolean) {
     const desired = new Map(profiles.filter((p) => consent && p.enabled).map((p) => [p.id, p]));
@@ -86,6 +95,7 @@ export class BridgeConnections {
 
   status(): BridgeStatus[] {
     return [...this.connections.values()].map(({ profile, socket, retry, attempts, lastAttemptAt, connectedAt, nextRetryAt, lastError }) => ({
+      browserId: this.identity?.browserId,
       id: profile.id, name: profile.name, url: this.url(profile),
       connected: socket?.readyState === WebSocket.OPEN,
       state: socket?.readyState === WebSocket.OPEN ? "connected" : retry ? "retrying" : "connecting",
@@ -154,6 +164,7 @@ export class BridgeConnections {
     socket.onopen = () => {
       if (connection.socket !== socket) return;
       opened = true;
+      if (this.identity) socket.send(JSON.stringify({ t: "register_browser", protocolVersion: 2, ...this.identity }));
       clearTimeout(connection.timeout);
       connection.timeout = undefined;
       connection.connectedAt = Date.now();

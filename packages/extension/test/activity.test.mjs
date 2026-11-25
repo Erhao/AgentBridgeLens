@@ -52,8 +52,10 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     },
     BridgeConnections: class {
       constructor(callback) { handle = callback; }
+      setIdentity() {}
       update() {}
     },
+    getBrowserIdentity: async () => ({ browserId: "72addc06-1d94-47a2-85c4-84400da367dd", name: "Test Chrome" }),
     getBridgeProfiles: async () => [],
     resolveTabId: async (id) => { if (id === -1) throw new Error("No target"); return id ?? 42; },
     listTabs: () => new Promise((resolve) => { resolveTab = resolve; }),

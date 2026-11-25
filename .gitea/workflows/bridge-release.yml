@@ -59,19 +59,8 @@ jobs:
           GITEA_SHA: ${{ gitea.sha }}
           NODE_USE_ENV_PROXY: '1'
         run: node scripts/release/github.mjs artifacts
-      - name: Publish to npm only when a Gitea npm token is configured
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo 'NPM_TOKEN is not configured: npm publication skipped; GitHub delivery is complete.'
-            exit 0
-          fi
-          npm_config_userconfig="$RUNNER_TEMP/abl-npmrc"
-          export npm_config_userconfig
-          trap 'rm -f "$npm_config_userconfig"' EXIT
-          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$npm_config_userconfig"
-          npm publish artifacts/agentbridgelens-*.tgz --ignore-scripts --access public --registry=https://registry.npmjs.org
+      - name: npm publication follows through GitHub trusted publishing
+        run: echo 'GitHub receives the verified artifact and publishes it to npm using OIDC; check that separate workflow and registry result.'
       - uses: https://gitea.com/actions/upload-artifact@v3
         if: always()
         with:

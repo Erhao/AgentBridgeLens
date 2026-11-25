@@ -48,7 +48,7 @@ export async function publishGitHub({ repository, token, sha, ref, artifactsDir,
       const details = await response.json().catch(() => ({}));
       throw new Error(`GitHub ${method} ${new URL(url).pathname} failed (HTTP ${response.status}): ${String(details.message ?? "Request rejected").slice(0, 300)}`);
     }
-    return binary ? Buffer.from(await response.arrayBuffer()) : response.json();
+    return response.status === 204 ? null : binary ? Buffer.from(await response.arrayBuffer()) : response.json();
   }
   const tagRef = await request(`${base}/git/ref/tags/${encodeURIComponent(tag)}`, { allow404: true });
   if (tagRef) {
@@ -82,6 +82,12 @@ export async function publishGitHub({ repository, token, sha, ref, artifactsDir,
   }
   if (release.draft) release = await request(`${base}/releases/${release.id}`, { method: "PATCH", body: { draft: false, prerelease: !stable, make_latest: "false" } });
   console.log(`Published verified Gitea build: ${release.html_url}`);
+  if (ref === `refs/tags/bridge-v${manifest.bridgeVersion}`) {
+    await request(`${base}/dispatches`, { method: "POST", body: {
+      event_type: "gitea-bridge-published", client_payload: { tag, sha },
+    } });
+    console.log(`Requested GitHub npm trusted publishing for ${tag}`);
+  }
   return release;
 }
 

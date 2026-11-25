@@ -2,7 +2,7 @@
 
 ## 默认交付约定
 
-按用户要求，本项目通过 Gitea Actions 构建和校验，完成后直接上传 GitHub Releases 发版和交付插件安装包；不运行 GitHub CI/CD。只有用户专门要求本地构建安装包时，才在本地运行 `pnpm zip` 或插件打包脚本；不要默认生成本地 ZIP，也不要把本地打包当作发版完成。类型检查和单元测试可在本地执行；浏览器验证所需扩展产物优先下载对应提交的 Actions 构建制品。
+按用户要求，本项目通过 Gitea Actions 构建和校验，完成后直接上传 GitHub Releases 发版和交付插件安装包；GitHub 不构建或重新打包；Bridge npm 的最终发布由 GitHub OIDC 工作流完成。只有用户专门要求本地构建安装包时，才在本地运行 `pnpm zip` 或插件打包脚本；不要默认生成本地 ZIP，也不要把本地打包当作发版完成。类型检查和单元测试可在本地执行；浏览器验证所需扩展产物优先下载对应提交的 Actions 构建制品。
 
 发版前同步远端并整合已有更新；推送后跟踪 Actions，确认版本、Release 与附件实际生成，再提供 GitHub 下载链接。扩展与 Bridge 分别发版，需要更新 AI 工具入口时同时发布相应 Bridge。协作入口见 [AGENTS.md](../AGENTS.md)。
 

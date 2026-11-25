@@ -1,0 +1,62 @@
+name: Publish Gitea Bridge artifact to npm
+
+on:
+  repository_dispatch:
+    types: [gitea-bridge-published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Gitea-built GitHub release tag (bridge-vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-${{ github.event.client_payload.tag || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  npm-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BRIDGE_TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+      EXPECTED_SHA: ${{ github.event.client_payload.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --global npm@11
+      - name: Download the existing Gitea build without rebuilding
+        shell: bash
+        run: |
+          node --input-type=module -e 'import {releaseVersion} from "./scripts/release/npm-publish.mjs"; releaseVersion(process.env.BRIDGE_TAG)'
+          draft="$(gh release view "$BRIDGE_TAG" --json isDraft --jq .isDraft)"
+          test "$draft" = false
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRIDGE_TAG" --jq .sha)"
+          if [ -n "$EXPECTED_SHA" ]; then test "$sha" = "$EXPECTED_SHA"; fi
+          echo "BRIDGE_SHA=$sha" >> "$GITHUB_ENV"
+          version="${BRIDGE_TAG#bridge-v}"
+          mkdir release
+          gh release download "$BRIDGE_TAG" --dir release \
+            --pattern "agentbridgelens-$version.tgz" --pattern "agentbridgelens-$version.tgz.sha256" \
+            --pattern BUILD-MANIFEST.json --pattern SHA256SUMS
+      - name: Verify build identity, checksums and existing npm version
+        id: verify
+        run: node scripts/release/npm-publish.mjs release
+      - name: Publish the identical tarball with npm trusted publishing
+        if: steps.verify.outputs.publish == 'true'
+        run: npm publish "release/${{ steps.verify.outputs.filename }}" --ignore-scripts --provenance --access public --registry=https://registry.npmjs.org
+      - name: Verify npm contains the identical package
+        run: |
+          for attempt in $(seq 1 12); do
+            node scripts/release/npm-publish.mjs release --require-published && exit 0
+            sleep 5
+          done
+          exit 1

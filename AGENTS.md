@@ -2,7 +2,7 @@
 
 ## 发布与插件安装包
 
-- 默认通过 Gitea Actions 构建和校验；构建完成后自动将同一份制品直接上传 GitHub Releases，不使用 GitHub CI/CD。用户说“发版”“发布”“给安装包”时，按此流程执行。
+- 默认通过 Gitea Actions 构建和校验；构建完成后自动将同一份制品直接上传 GitHub Releases，GitHub 仅接收已验证制品并通过 OIDC 发布 npm，不在 GitHub 构建、测试或重新打包。用户说“发版”“发布”“给安装包”时，按此流程执行。
 - 除非用户专门要求本地构建插件安装包，否则不要在本地运行 `pnpm zip`、插件打包脚本或正式发布构建，也不要把本地 ZIP 作为交付物。类型检查和单元测试可正常执行；浏览器验证需要扩展产物时，优先使用对应提交的 Gitea Actions 构建制品。
 - 提交前同步远端，保留主分支已有功能；推送后跟踪 Gitea Actions，确认 Gitea 制品、GitHub Release、版本和附件均已生成，再向用户提供 GitHub 下载链接。
 - 扩展和 Bridge 分别发版。改动涉及 AI 工具入口时，同时检查是否需要更新 Bridge；不要以扩展发布成功代替 Bridge 或 npm 发布成功。

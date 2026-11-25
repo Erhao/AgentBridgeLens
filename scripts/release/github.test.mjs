@@ -20,7 +20,7 @@ async function fixture(t, { stable = false, failUpload = false, wrongTag = false
   await writeFile(join(dir, "agentbridgelens-updater.zip"), bytes);
   await writeFile(join(dir, "BUILD-MANIFEST.json"), manifest);
   await writeFile(join(dir, "SHA256SUMS"), `${hash(bytes)}  agentbridgelens-updater.zip\n${hash(manifest)}  BUILD-MANIFEST.json\n`);
-  const state = { release: null, tag: wrongTag ? { object: { type: "commit", sha: "b".repeat(40) } } : null, writes: 0, bytes: new Map(), requests: 0 };
+  const state = { release: null, tag: wrongTag ? { object: { type: "commit", sha: "b".repeat(40) } } : null, writes: 0, bytes: new Map(), requests: 0, dispatches: [] };
   const server = createServer(async (req, res) => {
     state.requests++;
     if (req.headers.authorization !== "Bearer test-secret") { res.writeHead(401).end(); return; }
@@ -30,6 +30,11 @@ async function fixture(t, { stable = false, failUpload = false, wrongTag = false
     const body = Buffer.concat(data);
     const json = (value, code = 200) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(value)); };
     if (req.method !== "GET") state.writes++;
+    if (url.pathname.endsWith("/dispatches") && req.method === "POST") {
+      assert.equal(state.release?.draft, false, "npm publication must follow verified GitHub delivery");
+      state.dispatches.push(JSON.parse(body));
+      res.writeHead(204).end(); return;
+    }
     if (url.pathname.includes("/git/ref/tags/")) return state.tag ? json(state.tag) : json({}, 404);
     if (url.pathname.endsWith("/git/refs")) {
       const value = JSON.parse(body); state.tag = { object: { type: "commit", sha: value.sha } }; return json(state.tag, 201);
@@ -86,6 +91,13 @@ test("stable desktop releases do not become the latest extension release", async
   assert.equal(release.tag_name, "desktop-v0.6.0");
   assert.equal(release.prerelease, false);
   assert.equal(release.make_latest, "false");
+});
+
+test("Bridge delivery triggers npm trusted publishing only after all exact artifacts are public", async t => {
+  const { config, state } = await fixture(t, { stable: true });
+  config.ref = "refs/tags/bridge-v0.6.0";
+  await publishGitHub(config);
+  assert.deepEqual(state.dispatches, [{ event_type: "gitea-bridge-published", client_payload: { tag: "bridge-v0.6.0", sha } }]);
 });
 
 test("upload failure leaves the GitHub release as a draft", async (t) => {

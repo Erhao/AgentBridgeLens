@@ -19,7 +19,9 @@ Gitea Actions 的 `.gitea/workflows/extension.yml` 在推送到 `main` 时运行
 
 下载地址：[GitHub Releases](https://github.com/Erhao/AgentBridgeLens/releases/latest)。
 下载 ZIP 后解压，在 `chrome://extensions` 开启开发者模式，加载解压目录。
-升级时推荐使用更新工具替换原目录，再点击原插件的「重新加载」。更新工具通过 GitHub 最新正式版接口下载版本匹配的安装包与 SHA256；校验和结构检查通过后才切换目录，保留一个相邻的 `.abl-backup` 备份。首次应填写已安装插件的原目录，不更改扩展 ID，不读取或迁移 Chrome 存储。不要卸载后重装。
+升级时推荐使用更新工具替换原目录。支持自动重载的扩展通过 `chrome.alarms` 每分钟读取自身目录的 `manifest.json`（禁用缓存），发现磁盘版本与运行版本不同且没有正在执行的任务时，调用 `chrome.runtime.reload()`；升级和回滚都适用，不依赖 Bridge，不刷新网页。Chrome 需保持开发者模式开启；关闭浏览器、电脑休眠或任务执行期间会延后，读取失败时保留当前运行版本，下一次重试。首次从不支持此功能的旧版升级仍需手动「重新加载」一次；若回滚到旧版，后续更新也需手动重载。自动生效失败时可以手动重载原插件。
+
+更新工具通过 GitHub 最新正式版接口下载版本匹配的安装包与 SHA256；校验和结构检查通过后才切换目录，保留一个相邻的 `.abl-backup` 备份。首次应填写已安装插件的原目录，不更改扩展 ID，不读取或迁移 Chrome 存储。不要卸载后重装。
 
 ## 提交与版本
 
@@ -76,3 +78,11 @@ ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/update/update-e
 ```
 
 可用 `ABL_CHROMIUM_EXECUTABLE` 指定 Chromium。该验证使用独立 Chrome 配置，检查原目录更新、重新加载和回滚后扩展 ID、桥接服务、Token 及显示偏好保持不变。
+
+自动重载的独立浏览器验证（约两分钟，无需构建正式扩展，直接使用当前检查逻辑源码）：
+
+```bash
+ABL_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node packages/extension/test/local-update.browser.mjs
+```
+
+该测试用真实一分钟定时器验证 updater 更新及回滚自动生效、执行任务时延后、设置保留、另一安装目录不受影响，全程不连接 Bridge。

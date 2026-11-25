@@ -9,6 +9,7 @@ import { getBridgeProfiles, BRIDGE_COLORS } from "../shared/config";
 import { ContentConnection } from "./content-connection";
 import { BridgeConnections, type BridgeSource, type BridgeRetryState } from "./bridge-connections";
 import { getBrowserIdentity } from "./browser-identity";
+import { startLocalUpdateChecks } from "./local-update";
 import { traceElementToSource, traceStyleToSource } from "./source-tracer";
 import {
   startCdpNetwork,
@@ -424,4 +425,5 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 registerTabListeners();
+startLocalUpdateChecks(() => activeActivities.size > 0);
 connect();

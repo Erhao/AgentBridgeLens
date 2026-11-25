@@ -37,6 +37,7 @@ test("formatting distinguishes current work, failed work and browser-wide operat
 test("worker tracks overlapping calls, actual target tabs, completion and resolution errors", async () => {
   const originalChrome = globalThis.chrome;
   let handle;
+  let isUpdateBusy;
   let resolveTab;
   const events = [];
   const pageEvents = [];
@@ -56,6 +57,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
       update() {}
     },
     getBrowserIdentity: async () => ({ browserId: "72addc06-1d94-47a2-85c4-84400da367dd", name: "Test Chrome" }),
+    startLocalUpdateChecks(isBusy) { isUpdateBusy = isBusy; },
     getBridgeProfiles: async () => [],
     resolveTabId: async (id) => { if (id === -1) throw new Error("No target"); return id ?? 42; },
     listTabs: () => new Promise((resolve) => { resolveTab = resolve; }),
@@ -86,8 +88,10 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     source = source.replace(/import[\s\S]*?from\s+"[^"]+";/g, "");
     source = `const { ${Object.keys(dependencies).join(", ")} } = globalThis.__activityDependencies;\n${source}`;
     await moduleFrom(source);
+    assert.equal(isUpdateBusy(), false);
     const bridge = { name: "开发机" };
     const pending = handle({ tool: "list_tabs", params: {} }, bridge);
+    assert.equal(isUpdateBusy(), true, "local update waits for active tools");
     await handle({ tool: "get_cdp_network", params: { status: 500 } }, bridge);
     const latest = events.at(-1);
     assert.equal(latest.active.length, 1, "first call remains running when second finishes");
@@ -111,6 +115,7 @@ test("worker tracks overlapping calls, actual target tabs, completion and resolu
     assert.equal(scoped.recent.length, 0);
     resolveTab([]);
     await pending;
+    assert.equal(isUpdateBusy(), false, "local update resumes when all tools finish");
     assert.equal(events.at(-1).active.length, 0);
     await assert.rejects(handle({ tool: "get_cdp_network", params: { tabId: -1 } }, bridge), /No target/);
     assert.equal(events.at(-1).last.state, "failed");

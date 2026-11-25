@@ -37,7 +37,7 @@ main 构建的制品库版本为 `<Bridge版本>-dev.<提交短哈希>`；显式
 - `BUILD-MANIFEST.json`：记录提交、统一组件版本、实际原生平台/架构清单及所有安装包和 updater 的 SHA256。
 - `SHA256SUMS`：覆盖上述制品及构建清单。
 
-updater 下载并校验 GitHub 最新正式扩展，更新原扩展目录后，需要手动点击 Chrome 中原插件的「重新加载」。它不安装桌面应用或升级 Bridge；从 Gitea 下载 updater 不会改变它的更新源。扩展发布流程见 [RELEASING.md](../RELEASING.md)。
+updater 下载并校验 GitHub 最新正式扩展，更新原扩展目录后，支持自动重载的扩展每分钟检查一次，空闲时自行重载，不依赖 Bridge，Chrome 需保持开发者模式开启。首次从旧版升级或自动生效失败时，仍需手动点击 Chrome 中原插件的「重新加载」。它不安装桌面应用或升级 Bridge；从 Gitea 下载 updater 不会改变它的更新源。扩展发布流程见 [RELEASING.md](../RELEASING.md)。
 
 发布器要求原生包文件名与统一版本完全匹配，并在任何上传前验证 updater 校验文件；缺失 updater、混入旧平台包或混用版本会直接失败。相同版本的 Windows/Linux 原生包可以纳入同一批制品，当前流水线将 Windows 交叉编译结果和 Linux 脚本纳入 Bridge；Windows 原生运行验收仍需在线的 Windows 测试环境。
 

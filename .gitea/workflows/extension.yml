@@ -41,6 +41,7 @@ jobs:
           node packages/extension/test/connection-status.browser.mjs
           node packages/extension/test/activity-toast.browser.mjs
           node scripts/update/update-extension.browser.mjs
+          node packages/extension/test/local-update.browser.mjs
       - uses: https://gitea.com/actions/upload-artifact@v3
         with:
           name: extension-build-${{ gitea.sha }}

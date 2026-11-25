@@ -436,7 +436,7 @@ export function parseArgs(args) {
 export async function main(args = process.argv.slice(2), { preferenceFile = preferences, networkFetch = createNetworkFetch } = {}) {
   const options = parseArgs(args);
   if (options.help) {
-    console.log("用法：node update-extension.mjs [--dir 原扩展目录] [--check | --rollback] [--proxy 地址 | --no-proxy] [--retries 0～10]\n默认额外重试 4 次，显示进度并逐步延长间隔；持续 403 最多重试一次。\n代理支持 HTTP/HTTPS/SOCKS5；自动读取代理环境变量及 macOS 系统代理。--proxy 成功后会记住。\n首次运行可选择原安装目录；以后自动记住。--check 仅检查版本，--rollback 恢复上一版。\n请不要删除或重新导入 Chrome 中的原插件，更新后只点「重新加载」。");
+    console.log("用法：node update-extension.mjs [--dir 原扩展目录] [--check | --rollback] [--proxy 地址 | --no-proxy] [--retries 0～10]\n默认额外重试 4 次，显示进度并逐步延长间隔；持续 403 最多重试一次。\n代理支持 HTTP/HTTPS/SOCKS5；自动读取代理环境变量及 macOS 系统代理。--proxy 成功后会记住。\n首次运行可选择原安装目录；以后自动记住。--check 仅检查版本，--rollback 恢复上一版。\n请不要删除或重新导入 Chrome 中的原插件。支持自动重载的扩展每分钟检查原目录，空闲时自动生效；首次升级或未生效时手动点「重新加载」。");
     return;
   }
   if (Number(process.versions.node.split(".")[0]) < 20) throw new Error("需要 Node.js 20 或更高版本");
@@ -469,7 +469,7 @@ export async function main(args = process.argv.slice(2), { preferenceFile = pref
     console.log(`固定安装目录：${target}`);
     if (options.rollback) {
       await rollback(target);
-      console.log("已恢复上一版。请在 chrome://extensions 点击原插件的「重新加载」。");
+      console.log("已恢复上一版。支持自动重载的扩展会每分钟检查原目录，空闲时自动生效；若版本未变化，请在 chrome://extensions 点击原插件的「重新加载」。");
     } else {
       const network = await chooseProxy(options, saved);
       console.log(`网络：${network.source} · ${proxyLabel(network.proxy)}`);
@@ -492,7 +492,7 @@ export async function main(args = process.argv.slice(2), { preferenceFile = pref
       if (options.check) console.log("仅检查版本，未修改扩展文件。");
       else if (!result.changed) console.log("本地已是最新版或更高版本，无需更新。");
       else if (result.firstInstall) console.log(`安装完成。在 chrome://extensions 开启开发者模式，首次加载此固定目录：\n${target}`);
-      else console.log("更新完成，已保留上一版备份。请在 chrome://extensions 点击原插件的「重新加载」，然后刷新需要操作的网页。无需重新导入或填写桥接配置。");
+      else console.log("更新完成，已保留上一版备份。支持自动重载的扩展会每分钟检查原目录，空闲时自动生效，不依赖 Bridge。首次升级到支持此功能的版本，或版本未生效时，请在 chrome://extensions 点击原插件的「重新加载」。无需重新导入或填写桥接配置；网页脚本恢复失败时才需刷新网页。");
     }
     if (!options.check || options.proxy) {
       await mkdir(dirname(preferenceFile), { recursive: true });

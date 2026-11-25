@@ -52,7 +52,7 @@ jobs:
         run: node scripts/release/npm-publish.mjs release
       - name: Publish the identical tarball with npm trusted publishing
         if: steps.verify.outputs.publish == 'true'
-        run: npm publish "release/${{ steps.verify.outputs.filename }}" --ignore-scripts --provenance --access public --registry=https://registry.npmjs.org
+        run: npm publish "$GITHUB_WORKSPACE/release/${{ steps.verify.outputs.filename }}" --ignore-scripts --provenance --access public --registry=https://registry.npmjs.org
       - name: Verify npm contains the identical package
         run: |
           for attempt in $(seq 1 12); do

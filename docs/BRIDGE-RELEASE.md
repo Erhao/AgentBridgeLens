@@ -16,6 +16,8 @@ Release artifacts are built and tested by Gitea Actions, stored in Gitea Generic
 
 Keep the npm Trusted Publisher configured for owner `Erhao`, repository `AgentBridgeLens`, workflow filename `bridge-release.yml`, with no environment. This preserves the identity used by the successful 0.5.0 publisher. The GitHub-hosted publication job has `id-token: write`, Node 24 and npm 11. An expired local npm token does not affect OIDC publishing.
 
+npm can accept an upload and report that the package is still being processed. The workflow waits for registry availability and compares SHA512 integrity before reporting success. Do not republish or change the version just because public metadata is temporarily unavailable; if the wait expires, wait for npm processing and rerun the job, which skips publication once identical bytes are visible.
+
 For recovery of a previously delivered Gitea package, manually dispatch the GitHub workflow on main with its exact `bridge-vX.Y.Z` tag. This downloads and publishes the existing release; it does not move the tag or build another package. During the 0.6.0 migration the tag predates this workflow restoration, so its Gitea job uses the old delivery script; dispatch npm publication after its assets are verified.
 
 GitHub delivery uses Gitea Secret `GH_RELEASE_TOKEN` with Contents write access; registry publication uses `PACKAGES_TOKEN`. Never store token values in source or print them in logs.

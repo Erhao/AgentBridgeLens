@@ -20,6 +20,7 @@ concurrency:
 jobs:
   npm-publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -55,8 +56,8 @@ jobs:
         run: npm publish "$GITHUB_WORKSPACE/release/${{ steps.verify.outputs.filename }}" --ignore-scripts --provenance --access public --registry=https://registry.npmjs.org
       - name: Verify npm contains the identical package
         run: |
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 60); do
             node scripts/release/npm-publish.mjs release --require-published && exit 0
-            sleep 5
+            sleep 15
           done
           exit 1
